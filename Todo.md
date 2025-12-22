@@ -1,5 +1,4 @@
 - can I close the issue from the comment?
-- Sort comments by file
 - add a comment icon to the relevant line, right most side, mouse over shows the comment.
 - can I show comment icon on all lines in the file?
 - Can I link to multiple lines in an issue?

@@ -98,8 +98,8 @@
     }
 
     // Regex pattern to match GitHub blob URLs with line numbers
-    // Pattern: https://github.com/{owner}/{repo}/blob/{ref}/{filepath}#L{number}
-    const blobUrlPattern = /https:\/\/github\.com\/[^\/]+\/[^\/]+\/blob\/[^#]+#L\d+/;
+    // Pattern: https://github.com/{owner}/{repo}/blob/{ref}/{filepath}#L{number} or #L{number}-L{number}
+    const blobUrlPattern = /https:\/\/github\.com\/[^\/]+\/[^\/]+\/blob\/[^#]+#L\d+(?:-L\d+)?/;
     const match = issueBody.match(blobUrlPattern);
     
     if (match && match[0]) {
@@ -223,6 +223,67 @@
     `;
     headerContainer.appendChild(header);
     
+    // Create button container for clear cache and close buttons
+    const buttonContainer = document.createElement('div');
+    buttonContainer.style.cssText = `
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    `;
+    
+    // Create clear cache button
+    const clearCacheButton = document.createElement('button');
+    clearCacheButton.innerHTML = '🗑️';
+    clearCacheButton.setAttribute('aria-label', 'Clear cache');
+    clearCacheButton.title = 'Clear cache';
+    clearCacheButton.style.cssText = `
+      background: none;
+      border: none;
+      color: ${dark ? '#8b949e' : '#656d76'};
+      font-size: 16px;
+      line-height: 1;
+      cursor: pointer;
+      padding: 4px 8px;
+      margin: 0;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      transition: background-color 0.2s, color 0.2s;
+    `;
+    
+    // Hover effect for clear cache button
+    clearCacheButton.addEventListener('mouseenter', () => {
+      clearCacheButton.style.backgroundColor = hoverBgColor;
+      clearCacheButton.style.color = textColor;
+    });
+    
+    clearCacheButton.addEventListener('mouseleave', () => {
+      clearCacheButton.style.backgroundColor = 'transparent';
+      clearCacheButton.style.color = dark ? '#8b949e' : '#656d76';
+    });
+    
+    // Clear cache functionality
+    clearCacheButton.addEventListener('click', () => {
+      const repoInfo = getRepoInfo();
+      if (repoInfo) {
+        clearCache(repoInfo.owner, repoInfo.repo);
+        // Re-fetch issues after clearing cache
+        renderIssues(sidebar, null); // Show loading state
+        fetchIssues(repoInfo.owner, repoInfo.repo)
+          .then(issues => {
+            renderIssues(sidebar, issues);
+          })
+          .catch(error => {
+            renderIssues(sidebar, null, error.message);
+          });
+      }
+    });
+    
+    buttonContainer.appendChild(clearCacheButton);
+    
     // Create close button
     const closeButton = document.createElement('button');
     closeButton.innerHTML = '×';
@@ -261,7 +322,8 @@
       sidebar.style.display = 'none';
     });
     
-    headerContainer.appendChild(closeButton);
+    buttonContainer.appendChild(closeButton);
+    headerContainer.appendChild(buttonContainer);
     sidebar.appendChild(headerContainer);
     
     // Show error state
@@ -600,6 +662,16 @@
   // Generate cache key from owner and repo
   function getCacheKey(owner, repo) {
     return `issues:${owner}:${repo}`;
+  }
+
+  // Clear cache for a specific repository
+  function clearCache(owner, repo) {
+    const cacheKey = getCacheKey(owner, repo);
+    chrome.storage.local.remove([cacheKey], () => {
+      if (chrome.runtime.lastError) {
+        console.error('Error clearing cache:', chrome.runtime.lastError);
+      }
+    });
   }
 
   // Save issues to cache
