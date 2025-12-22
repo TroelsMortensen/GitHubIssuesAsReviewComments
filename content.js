@@ -5,6 +5,9 @@
   const SIDEBAR_ID = 'github-issues-sidebar';
   const REOPEN_BUTTON_ID = 'github-issues-reopen-button';
   
+  // Store current issues for line icon injection
+  let currentIssues = null;
+  
   // Check if we're on a blob page
   function isBlobPage() {
     return window.location.pathname.includes('/blob/');
@@ -91,6 +94,22 @@
     return filename;
   }
 
+  // Extract line number from blob URL
+  function extractLineNumber(blobUrl) {
+    if (!blobUrl) {
+      return null;
+    }
+    
+    // Extract line number from patterns: #L33 or #L39-L43 (use first line number)
+    const lineMatch = blobUrl.match(/#L(\d+)(?:-L\d+)?/);
+    
+    if (lineMatch && lineMatch[1]) {
+      return parseInt(lineMatch[1], 10);
+    }
+    
+    return null;
+  }
+
   // Extract GitHub blob URL with line number from issue body
   function extractBlobUrl(issueBody) {
     if (!issueBody) {
@@ -146,6 +165,269 @@
     });
     
     return sortedGroups;
+  }
+
+  // Build map of line numbers to issues for the current file
+  function buildLineToIssuesMap(issues, currentFilePath) {
+    const lineMap = {};
+    
+    if (!currentFilePath || !issues || issues.length === 0) {
+      return lineMap;
+    }
+    
+    issues.forEach(issue => {
+      const blobUrl = extractBlobUrl(issue.body);
+      if (!blobUrl) {
+        return;
+      }
+      
+      // Check if this issue references the current file
+      const filePath = extractFilePathFromBlobUrl(blobUrl);
+      if (filePath !== currentFilePath) {
+        return;
+      }
+      
+      // Extract line number
+      const lineNumber = extractLineNumber(blobUrl);
+      if (lineNumber === null) {
+        return;
+      }
+      
+      // Add issue to the line's array
+      if (!lineMap[lineNumber]) {
+        lineMap[lineNumber] = [];
+      }
+      lineMap[lineNumber].push(issue);
+    });
+    
+    return lineMap;
+  }
+
+  // Find code line elements in GitHub code viewer
+  function findCodeLineElements() {
+    // GitHub uses table rows with data-line-number attribute
+    // Try multiple selectors to handle different GitHub layouts
+    const selectors = [
+      'tr[data-line-number]',
+      'td[data-line-number]',
+      '.react-file-line[data-line-number]',
+      '[data-line-number]'
+    ];
+    
+    for (const selector of selectors) {
+      const elements = document.querySelectorAll(selector);
+      if (elements.length > 0) {
+        return Array.from(elements);
+      }
+    }
+    
+    return [];
+  }
+
+  // Create line icon with tooltip showing issue bodies
+  function createLineIcon(lineNumber, issues, isDark) {
+    if (!issues || issues.length === 0) {
+      return null;
+    }
+    
+    const iconContainer = document.createElement('span');
+    iconContainer.className = 'github-issues-line-icon';
+    iconContainer.setAttribute('data-line-number', lineNumber);
+    iconContainer.style.cssText = `
+      position: absolute;
+      right: 0;
+      top: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+      z-index: 10;
+    `;
+    
+    // Create icon image
+    const icon = document.createElement('img');
+    icon.src = chrome.runtime.getURL('icons/icon48.png');
+    icon.alt = 'Issues';
+    icon.style.cssText = `
+      width: 16px;
+      height: 16px;
+      opacity: 0.7;
+      transition: opacity 0.2s;
+    `;
+    iconContainer.appendChild(icon);
+    
+    // Extract and format issue bodies for tooltip
+    const issueTexts = issues.map(issue => extractBodyText(issue.body)).filter(text => text);
+    const tooltipText = issueTexts.join('\n\n---\n\n');
+    
+    // Create tooltip
+    const tooltip = document.createElement('div');
+    tooltip.className = 'github-issues-line-tooltip';
+    tooltip.textContent = tooltipText;
+    
+    tooltip.style.cssText = `
+      position: fixed;
+      background-color: ${isDark ? '#30363d' : '#24292f'};
+      color: ${isDark ? '#c9d1d9' : '#ffffff'};
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      white-space: pre-wrap;
+      width: 250px;
+      max-width: 250px;
+      max-height: 400px;
+      overflow-y: auto;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s;
+      z-index: 999999;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      word-wrap: break-word;
+      line-height: 1.5;
+    `;
+    
+    // Append tooltip to body to avoid clipping issues
+    document.body.appendChild(tooltip);
+    
+    // Show tooltip on hover
+    iconContainer.addEventListener('mouseenter', (e) => {
+      icon.style.opacity = '1';
+      
+      // Calculate tooltip position based on icon location
+      const iconRect = iconContainer.getBoundingClientRect();
+      const tooltipRect = tooltip.getBoundingClientRect();
+      
+      // Position above the icon
+      let top = iconRect.top - tooltipRect.height - 8;
+      let left = iconRect.left + (iconRect.width / 2) - (tooltipRect.width / 2);
+      
+      // If tooltip would go off top of screen, position below instead
+      if (top < 0) {
+        top = iconRect.bottom + 8;
+      }
+      
+      // Ensure tooltip doesn't go off left edge
+      if (left < 8) {
+        left = 8;
+      }
+      
+      // Ensure tooltip doesn't go off right edge
+      const rightEdge = window.innerWidth - tooltipRect.width - 8;
+      if (left > rightEdge) {
+        left = rightEdge;
+      }
+      
+      tooltip.style.top = `${top}px`;
+      tooltip.style.left = `${left}px`;
+      tooltip.style.opacity = '1';
+    });
+    
+    iconContainer.addEventListener('mouseleave', () => {
+      icon.style.opacity = '0.7';
+      tooltip.style.opacity = '0';
+    });
+    
+    // Also handle tooltip hover to keep it visible when moving to it
+    tooltip.addEventListener('mouseenter', () => {
+      tooltip.style.opacity = '1';
+    });
+    
+    tooltip.addEventListener('mouseleave', () => {
+      tooltip.style.opacity = '0';
+    });
+    
+    return iconContainer;
+  }
+
+  // Remove all line icons
+  function removeLineIcons() {
+    const icons = document.querySelectorAll('.github-issues-line-icon');
+    icons.forEach(icon => icon.remove());
+  }
+
+  // Inject icons into code lines
+  function injectLineIcons(issues) {
+    // Remove existing icons first
+    removeLineIcons();
+    
+    if (!isBlobPage()) {
+      return;
+    }
+    
+    const currentFilePath = getCurrentFilePath();
+    if (!currentFilePath) {
+      return;
+    }
+    
+    // Build line-to-issues map
+    const lineMap = buildLineToIssuesMap(issues, currentFilePath);
+    if (Object.keys(lineMap).length === 0) {
+      return;
+    }
+    
+    // Find code line elements
+    const lineElements = findCodeLineElements();
+    if (lineElements.length === 0) {
+      return;
+    }
+    
+    const dark = isDarkMode();
+    
+    // Process each line element
+    lineElements.forEach(lineElement => {
+      const lineNumberAttr = lineElement.getAttribute('data-line-number');
+      if (!lineNumberAttr) {
+        return;
+      }
+      
+      const lineNumber = parseInt(lineNumberAttr, 10);
+      if (isNaN(lineNumber)) {
+        return;
+      }
+      
+      // Check if this line has issues
+      const lineIssues = lineMap[lineNumber];
+      if (!lineIssues || lineIssues.length === 0) {
+        return;
+      }
+      
+      // Check if icon already exists
+      const existingIcon = lineElement.querySelector('.github-issues-line-icon');
+      if (existingIcon) {
+        return;
+      }
+      
+      // Create icon
+      const icon = createLineIcon(lineNumber, lineIssues, dark);
+      if (!icon) {
+        return;
+      }
+      
+      // Find the right place to insert the icon
+      // GitHub code lines typically have a structure like: <tr><td class="blob-num">...</td><td class="blob-code">...</td></tr>
+      // We want to insert the icon in the code cell, positioned absolutely on the right
+      const codeCell = lineElement.querySelector('td.blob-code, .blob-code, [class*="blob-code"]');
+      if (codeCell) {
+        // Make sure the code cell has relative positioning for absolute child
+        const computedPosition = window.getComputedStyle(codeCell).position;
+        if (computedPosition === 'static') {
+          codeCell.style.position = 'relative';
+        }
+        
+        // Append directly to code cell so it's positioned at the right edge
+        codeCell.appendChild(icon);
+      } else {
+        // Fallback: append to the line element itself
+        const elementPosition = window.getComputedStyle(lineElement).position;
+        if (elementPosition === 'static') {
+          lineElement.style.position = 'relative';
+        }
+        lineElement.appendChild(icon);
+      }
+    });
   }
 
   // Extract and clean issue body text, removing blob URLs
@@ -274,9 +556,11 @@
         renderIssues(sidebar, null); // Show loading state
         fetchIssues(repoInfo.owner, repoInfo.repo)
           .then(issues => {
+            currentIssues = issues;
             renderIssues(sidebar, issues);
           })
           .catch(error => {
+            currentIssues = null;
             renderIssues(sidebar, null, error.message);
           });
       }
@@ -499,6 +783,20 @@
     });
     
     sidebar.appendChild(issuesContainer);
+    
+    // Store issues for line icon injection
+    if (issues && issues.length > 0) {
+      currentIssues = issues;
+      // Inject line icons after rendering issues
+      // Use setTimeout to ensure DOM is ready
+      setTimeout(() => {
+        injectLineIcons(issues);
+      }, 200);
+    } else {
+      currentIssues = null;
+      // Remove icons if no issues
+      removeLineIcons();
+    }
   }
 
   // Create the sidebar
@@ -521,12 +819,15 @@
     if (repoInfo) {
       fetchIssues(repoInfo.owner, repoInfo.repo)
         .then(issues => {
+          currentIssues = issues;
           renderIssues(sidebar, issues);
         })
         .catch(error => {
+          currentIssues = null;
           renderIssues(sidebar, null, error.message);
         });
     } else {
+      currentIssues = null;
       renderIssues(sidebar, null, 'Could not determine repository');
     }
 
@@ -910,5 +1211,19 @@
   // Also check on popstate (browser back/forward)
   window.addEventListener('popstate', () => {
     setTimeout(injectSidebar, 100);
+  });
+
+  // Function to inject line icons if we have issues
+  function tryInjectLineIcons() {
+    if (currentIssues && currentIssues.length > 0) {
+      setTimeout(() => {
+        injectLineIcons(currentIssues);
+      }, 200);
+    }
+  }
+
+  // Handle hash changes (line navigation)
+  window.addEventListener('hashchange', () => {
+    tryInjectLineIcons();
   });
 })();
