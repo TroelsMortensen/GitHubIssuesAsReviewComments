@@ -139,6 +139,23 @@
       return;
     }
     
+    // Filter out closed issues
+    const openIssues = issues.filter(issue => issue.state === 'open');
+    
+    // Show empty state if no open issues
+    if (openIssues.length === 0) {
+      const emptyDiv = document.createElement('div');
+      emptyDiv.style.cssText = `
+        padding: 12px;
+        color: ${dark ? '#8b949e' : '#656d76'};
+        font-size: 14px;
+        text-align: center;
+      `;
+      emptyDiv.textContent = 'No open issues found';
+      sidebar.appendChild(emptyDiv);
+      return;
+    }
+    
     // Create issues list
     const issuesList = document.createElement('ul');
     issuesList.style.cssText = `
@@ -147,7 +164,7 @@
       padding: 0;
     `;
     
-    issues.forEach(issue => {
+    openIssues.forEach(issue => {
       const listItem = document.createElement('li');
       listItem.style.cssText = `
         margin-bottom: 8px;
