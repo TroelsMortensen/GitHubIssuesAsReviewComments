@@ -37,6 +37,24 @@
            window.matchMedia('(prefers-color-scheme: dark)').matches;
   }
 
+  // Extract GitHub blob URL with line number from issue body
+  function extractBlobUrl(issueBody) {
+    if (!issueBody) {
+      return null;
+    }
+
+    // Regex pattern to match GitHub blob URLs with line numbers
+    // Pattern: https://github.com/{owner}/{repo}/blob/{ref}/{filepath}#L{number}
+    const blobUrlPattern = /https:\/\/github\.com\/[^\/]+\/[^\/]+\/blob\/[^#]+#L\d+/;
+    const match = issueBody.match(blobUrlPattern);
+    
+    if (match && match[0]) {
+      return match[0];
+    }
+    
+    return null;
+  }
+
   // Render issues list in sidebar
   function renderIssues(sidebar, issues, error = null) {
     // Clear existing content
@@ -135,8 +153,12 @@
         margin-bottom: 8px;
       `;
       
+      // Extract blob URL from issue body, fallback to issue URL
+      const blobUrl = extractBlobUrl(issue.body);
+      const linkUrl = blobUrl || issue.html_url;
+      
       const issueLink = document.createElement('a');
-      issueLink.href = issue.html_url;
+      issueLink.href = linkUrl;
       issueLink.target = '_blank';
       issueLink.rel = 'noopener noreferrer';
       issueLink.textContent = `#${issue.number}: ${issue.title}`;
