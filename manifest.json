@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "GitHub Issues As Review Comments",
+  "name": "GitHub Review Comments",
   "version": "0.0.2",
   "description": "A browser extension for Chrome and Edge",
   "permissions": [
@@ -31,6 +31,12 @@
       "matches": ["https://github.com/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/*.png"],
+      "matches": ["https://github.com/*"]
     }
   ]
 }

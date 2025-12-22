@@ -1,0 +1,8 @@
+- show comment body instead of issue title. 
+- White box for the comment issue overview.
+- can I close the issue from the comment?
+- Sort comments by file
+- add a comment icon to the relevant line, right most side, mouse over shows the comment.
+- leave the comment icon in place, even when the pane is open.
+- can I show comment icon on all lines in the file?
+- Can I link to multiple lines in an issue?

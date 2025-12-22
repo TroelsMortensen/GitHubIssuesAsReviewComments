@@ -3,6 +3,7 @@
   'use strict';
 
   const SIDEBAR_ID = 'github-issues-sidebar';
+  const REOPEN_BUTTON_ID = 'github-issues-reopen-button';
   
   // Check if we're on a blob page
   function isBlobPage() {
@@ -28,6 +29,13 @@
     const containers = document.querySelectorAll('.Box-sc-62in7e-0.hGzGyY');
     // Return the first one found (should be the code viewer container)
     return containers.length > 0 ? containers[0] : null;
+  }
+
+  // Find the toolbar container
+  function findToolbarContainer() {
+    // Find the div with class BlobViewHeader-module__Box_3--Kvpex
+    const toolbar = document.querySelector('.BlobViewHeader-module__Box_3--Kvpex');
+    return toolbar;
   }
 
   // Detect theme mode
@@ -140,6 +148,7 @@
     // Close functionality
     closeButton.addEventListener('click', () => {
       sidebar.style.display = 'none';
+      updateReopenButtonVisibility();
     });
     
     headerContainer.appendChild(closeButton);
@@ -290,6 +299,129 @@
   // Store original container display style
   let originalContainerDisplay = null;
 
+  // Create reopen button for toolbar
+  function createReopenButton() {
+    const dark = isDarkMode();
+    const iconColor = dark ? '#8b949e' : '#656d76';
+    const hoverIconColor = dark ? '#c9d1d9' : '#24292f';
+    
+    const button = document.createElement('button');
+    button.id = REOPEN_BUTTON_ID;
+    button.setAttribute('aria-label', 'Show issues sidebar');
+    button.type = 'button';
+    button.style.cssText = `
+      background: transparent;
+      border: none;
+      color: ${iconColor};
+      cursor: pointer;
+      padding: 8px;
+      margin-left: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      transition: background-color 0.2s, color 0.2s;
+      position: relative;
+    `;
+    
+    // Create icon using icon48.png
+    const icon = document.createElement('img');
+    icon.src = chrome.runtime.getURL('icons/icon48.png');
+    icon.alt = 'Issues';
+    icon.style.cssText = `
+      width: 16px;
+      height: 16px;
+      vertical-align: text-bottom;
+    `;
+    button.appendChild(icon);
+    
+    // Create custom tooltip
+    const tooltip = document.createElement('div');
+    tooltip.textContent = 'Show issues sidebar';
+    tooltip.style.cssText = `
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: #30363d;
+      color: #ffffff;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      white-space: nowrap;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s;
+      z-index: 10000;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    `;
+    button.appendChild(tooltip);
+    
+    // Show tooltip on hover
+    button.addEventListener('mouseenter', () => {
+      button.style.backgroundColor = dark ? '#21262d' : '#f6f8fa';
+      button.style.color = hoverIconColor;
+      tooltip.style.opacity = '1';
+    });
+    
+    button.addEventListener('mouseleave', () => {
+      button.style.backgroundColor = 'transparent';
+      button.style.color = iconColor;
+      tooltip.style.opacity = '0';
+    });
+    
+    // Click handler to reopen sidebar
+    button.addEventListener('click', () => {
+      const sidebar = document.getElementById(SIDEBAR_ID);
+      if (sidebar) {
+        sidebar.style.display = '';
+        matchSidebarHeight();
+      } else {
+        // Sidebar doesn't exist, recreate it
+        injectSidebar();
+      }
+      updateReopenButtonVisibility();
+    });
+    
+    return button;
+  }
+
+  // Update reopen button visibility based on sidebar state
+  function updateReopenButtonVisibility() {
+    const reopenButton = document.getElementById(REOPEN_BUTTON_ID);
+    if (!reopenButton) return;
+    
+    const sidebar = document.getElementById(SIDEBAR_ID);
+    const isSidebarVisible = sidebar && sidebar.style.display !== 'none' && 
+                            getComputedStyle(sidebar).display !== 'none';
+    
+    reopenButton.style.display = isSidebarVisible ? 'none' : 'inline-flex';
+  }
+
+  // Add reopen button to toolbar
+  function addReopenButtonToToolbar() {
+    const toolbar = findToolbarContainer();
+    if (!toolbar) {
+      // Toolbar not found, try again later
+      return false;
+    }
+    
+    // Check if button already exists
+    const existing = document.getElementById(REOPEN_BUTTON_ID);
+    if (existing) {
+      return true;
+    }
+    
+    // Create and add button
+    const button = createReopenButton();
+    toolbar.appendChild(button);
+    
+    // Update visibility based on current sidebar state
+    updateReopenButtonVisibility();
+    
+    return true;
+  }
+
   // Fetch issues from GitHub API
   async function fetchIssues(owner, repo) {
     try {
@@ -356,6 +488,11 @@
           originalContainerDisplay = null;
         }
       }
+      // Hide reopen button when not on blob page
+      const reopenButton = document.getElementById(REOPEN_BUTTON_ID);
+      if (reopenButton) {
+        reopenButton.style.display = 'none';
+      }
       return;
     }
 
@@ -378,6 +515,8 @@
       }
       // Update height to match siblings
       matchSidebarHeight();
+      // Update reopen button visibility
+      updateReopenButtonVisibility();
       return;
     }
 
@@ -416,19 +555,31 @@
         resizeObserver.observe(sibling);
       });
     }
+    
+    // Try to add reopen button to toolbar
+    addReopenButtonToToolbar();
   }
 
   // Initial injection
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', injectSidebar);
-  } else {
+  function initializeExtension() {
     injectSidebar();
+    // Try to add reopen button (toolbar might load later, so we'll retry)
+    if (!addReopenButtonToToolbar()) {
+      // Retry after a short delay if toolbar not found
+      setTimeout(() => addReopenButtonToToolbar(), 500);
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeExtension);
+  } else {
+    initializeExtension();
   }
 
   // Handle GitHub's SPA navigation (Turbo/PJAX)
   // GitHub uses Turbo for navigation, so we listen for turbo:load events
-  document.addEventListener('turbo:load', injectSidebar);
-  document.addEventListener('pjax:end', injectSidebar);
+  document.addEventListener('turbo:load', initializeExtension);
+  document.addEventListener('pjax:end', initializeExtension);
   
   // Fallback: Observe URL changes using MutationObserver on the body
   let lastUrl = location.href;
