@@ -82,18 +82,68 @@
       max-height: 100%;
     `;
     
-    // Create header
+    // Create header container
+    const headerContainer = document.createElement('div');
+    headerContainer.style.cssText = `
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 0 0 12px 0;
+      padding-bottom: 8px;
+      border-bottom: 1px solid ${borderColor};
+    `;
+    
+    // Create header title
     const header = document.createElement('h3');
     header.textContent = 'Issues';
     header.style.cssText = `
       font-size: 16px;
       font-weight: 600;
       color: ${textColor};
-      margin: 0 0 12px 0;
-      padding-bottom: 8px;
-      border-bottom: 1px solid ${borderColor};
+      margin: 0;
     `;
-    sidebar.appendChild(header);
+    headerContainer.appendChild(header);
+    
+    // Create close button
+    const closeButton = document.createElement('button');
+    closeButton.innerHTML = '×';
+    closeButton.setAttribute('aria-label', 'Close sidebar');
+    closeButton.style.cssText = `
+      background: none;
+      border: none;
+      color: ${dark ? '#8b949e' : '#656d76'};
+      font-size: 24px;
+      line-height: 1;
+      cursor: pointer;
+      padding: 4px 8px;
+      margin: -4px -8px -4px 0;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      transition: background-color 0.2s, color 0.2s;
+    `;
+    
+    // Hover effect
+    closeButton.addEventListener('mouseenter', () => {
+      closeButton.style.backgroundColor = hoverBgColor;
+      closeButton.style.color = textColor;
+    });
+    
+    closeButton.addEventListener('mouseleave', () => {
+      closeButton.style.backgroundColor = 'transparent';
+      closeButton.style.color = dark ? '#8b949e' : '#656d76';
+    });
+    
+    // Close functionality
+    closeButton.addEventListener('click', () => {
+      sidebar.style.display = 'none';
+    });
+    
+    headerContainer.appendChild(closeButton);
+    sidebar.appendChild(headerContainer);
     
     // Show error state
     if (error) {
