@@ -268,7 +268,7 @@
       issueBox.rel = 'noopener noreferrer';
       issueBox.textContent = bodyText;
       issueBox.style.cssText = `
-        display: -webkit-box;
+        display: block;
         background-color: ${dark ? '#21262d' : '#ffffff'};
         border: 1px solid ${borderColor};
         border-radius: 6px;
@@ -280,20 +280,24 @@
         cursor: pointer;
         transition: border-color 0.2s, box-shadow 0.2s;
         overflow: hidden;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-        text-overflow: ellipsis;
+        max-height: 45.5px;
         word-wrap: break-word;
       `;
       
       issueBox.addEventListener('mouseenter', () => {
         issueBox.style.borderColor = dark ? '#30363d' : '#d0d7de';
         issueBox.style.boxShadow = dark ? '0 1px 3px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.1)';
+        issueBox.style.maxHeight = 'none';
+        issueBox.style.zIndex = '1000';
+        issueBox.style.position = 'relative';
       });
       
       issueBox.addEventListener('mouseleave', () => {
         issueBox.style.borderColor = borderColor;
         issueBox.style.boxShadow = 'none';
+        issueBox.style.maxHeight = '45.5px';
+        issueBox.style.zIndex = 'auto';
+        issueBox.style.position = '';
       });
       
       issuesContainer.appendChild(issueBox);
@@ -457,9 +461,72 @@
     return true;
   }
 
+  // Cache expiration time (5 minutes in milliseconds)
+  const CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
+
+  // Generate cache key from owner and repo
+  function getCacheKey(owner, repo) {
+    return `issues:${owner}:${repo}`;
+  }
+
+  // Save issues to cache
+  function saveIssuesToCache(owner, repo, issues) {
+    const cacheKey = getCacheKey(owner, repo);
+    const cacheData = {
+      issues: issues,
+      timestamp: Date.now()
+    };
+    
+    chrome.storage.local.set({ [cacheKey]: cacheData }, () => {
+      if (chrome.runtime.lastError) {
+        console.error('Error saving issues to cache:', chrome.runtime.lastError);
+      }
+    });
+  }
+
+  // Get issues from cache (returns null if expired or missing)
+  function getIssuesFromCache(owner, repo) {
+    const cacheKey = getCacheKey(owner, repo);
+    
+    return new Promise((resolve) => {
+      chrome.storage.local.get([cacheKey], (result) => {
+        if (chrome.runtime.lastError) {
+          console.error('Error retrieving issues from cache:', chrome.runtime.lastError);
+          resolve(null);
+          return;
+        }
+        
+        const cachedData = result[cacheKey];
+        if (!cachedData || !cachedData.issues || !cachedData.timestamp) {
+          resolve(null);
+          return;
+        }
+        
+        // Check if cache is expired
+        const now = Date.now();
+        const cacheAge = now - cachedData.timestamp;
+        if (cacheAge > CACHE_EXPIRY_MS) {
+          // Cache expired
+          resolve(null);
+          return;
+        }
+        
+        // Cache is valid, return issues
+        resolve(cachedData.issues);
+      });
+    });
+  }
+
   // Fetch issues from GitHub API
   async function fetchIssues(owner, repo) {
     try {
+      // First, check cache
+      const cachedIssues = await getIssuesFromCache(owner, repo);
+      if (cachedIssues) {
+        return cachedIssues;
+      }
+      
+      // Cache miss or expired, fetch from API
       const url = `https://api.github.com/repos/${owner}/${repo}/issues?state=all&per_page=100&sort=created&direction=desc`;
       const response = await fetch(url);
       
@@ -476,6 +543,10 @@
       const issues = await response.json();
       // Filter out pull requests (issues have pull_request property when they're PRs)
       const actualIssues = issues.filter(issue => !issue.pull_request);
+      
+      // Save to cache
+      saveIssuesToCache(owner, repo, actualIssues);
+      
       return actualIssues;
     } catch (error) {
       console.error('Error fetching issues:', error);
