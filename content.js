@@ -725,18 +725,40 @@
       issuesContainer.appendChild(headerDiv);
       issuesContainer.appendChild(dividerDiv);
       
+      // Sort issues by line number
+      const sortedFileIssues = fileIssues.slice().sort((a, b) => {
+        const blobUrlA = extractBlobUrl(a.body);
+        const blobUrlB = extractBlobUrl(b.body);
+        const lineNumberA = blobUrlA ? extractLineNumber(blobUrlA) : null;
+        const lineNumberB = blobUrlB ? extractLineNumber(blobUrlB) : null;
+        
+        // Issues without line numbers go to the end
+        if (lineNumberA === null && lineNumberB === null) return 0;
+        if (lineNumberA === null) return 1;
+        if (lineNumberB === null) return -1;
+        
+        // Sort by line number
+        return lineNumberA - lineNumberB;
+      });
+      
       // Render issues for this file
-      fileIssues.forEach(issue => {
+      sortedFileIssues.forEach(issue => {
         // Extract blob URL from issue body, fallback to issue URL
         const blobUrl = extractBlobUrl(issue.body);
         const linkUrl = blobUrl || issue.html_url;
         
         // Extract and clean body text
-        const bodyText = extractBodyText(issue.body);
+        let bodyText = extractBodyText(issue.body);
         
         // Skip if body is empty after cleaning
         if (!bodyText) {
           return;
+        }
+        
+        // Extract line number and prefix body text
+        const lineNumber = blobUrl ? extractLineNumber(blobUrl) : null;
+        if (lineNumber !== null) {
+          bodyText = `${lineNumber}: ${bodyText}`;
         }
         
         // Create box/link element
