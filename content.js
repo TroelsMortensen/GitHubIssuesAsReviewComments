@@ -63,6 +63,32 @@
     return null;
   }
 
+  // Extract and clean issue body text, removing blob URLs
+  function extractBodyText(issueBody) {
+    if (!issueBody) {
+      return '';
+    }
+
+    let bodyText = issueBody;
+    
+    // Remove blob URL if present
+    const blobUrl = extractBlobUrl(bodyText);
+    if (blobUrl) {
+      bodyText = bodyText.replace(blobUrl, '').trim();
+    }
+    
+    // Remove leading/trailing whitespace and newlines
+    bodyText = bodyText.trim();
+    
+    // Remove multiple consecutive newlines
+    bodyText = bodyText.replace(/\n\s*\n/g, '\n');
+    
+    // Trim again after cleaning
+    bodyText = bodyText.trim();
+    
+    return bodyText;
+  }
+
   // Render issues list in sidebar
   function renderIssues(sidebar, issues, error = null) {
     // Clear existing content
@@ -148,7 +174,6 @@
     // Close functionality
     closeButton.addEventListener('click', () => {
       sidebar.style.display = 'none';
-      updateReopenButtonVisibility();
     });
     
     headerContainer.appendChild(closeButton);
@@ -215,53 +240,66 @@
       return;
     }
     
-    // Create issues list
-    const issuesList = document.createElement('ul');
-    issuesList.style.cssText = `
-      list-style: none;
-      margin: 0;
-      padding: 0;
+    // Create issues container
+    const issuesContainer = document.createElement('div');
+    issuesContainer.style.cssText = `
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
     `;
     
     openIssues.forEach(issue => {
-      const listItem = document.createElement('li');
-      listItem.style.cssText = `
-        margin-bottom: 8px;
-      `;
-      
       // Extract blob URL from issue body, fallback to issue URL
       const blobUrl = extractBlobUrl(issue.body);
       const linkUrl = blobUrl || issue.html_url;
       
-      const issueLink = document.createElement('a');
-      issueLink.href = linkUrl;
-      issueLink.target = '_blank';
-      issueLink.rel = 'noopener noreferrer';
-      issueLink.textContent = `#${issue.number}: ${issue.title}`;
-      issueLink.style.cssText = `
-        display: block;
-        padding: 8px 12px;
+      // Extract and clean body text
+      const bodyText = extractBodyText(issue.body);
+      
+      // Skip if body is empty after cleaning
+      if (!bodyText) {
+        return;
+      }
+      
+      // Create box/link element
+      const issueBox = document.createElement('a');
+      issueBox.href = linkUrl;
+      issueBox.target = '_blank';
+      issueBox.rel = 'noopener noreferrer';
+      issueBox.textContent = bodyText;
+      issueBox.style.cssText = `
+        display: -webkit-box;
+        background-color: ${dark ? '#21262d' : '#ffffff'};
+        border: 1px solid ${borderColor};
+        border-radius: 6px;
+        padding: 12px;
         color: ${textColor};
         text-decoration: none;
-        border-radius: 6px;
         font-size: 13px;
-        line-height: 1.4;
-        transition: background-color 0.2s;
+        line-height: 1.5;
+        cursor: pointer;
+        transition: border-color 0.2s, box-shadow 0.2s;
+        overflow: hidden;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        text-overflow: ellipsis;
+        word-wrap: break-word;
       `;
       
-      issueLink.addEventListener('mouseenter', () => {
-        issueLink.style.backgroundColor = hoverBgColor;
+      issueBox.addEventListener('mouseenter', () => {
+        issueBox.style.borderColor = dark ? '#30363d' : '#d0d7de';
+        issueBox.style.boxShadow = dark ? '0 1px 3px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.1)';
       });
       
-      issueLink.addEventListener('mouseleave', () => {
-        issueLink.style.backgroundColor = 'transparent';
+      issueBox.addEventListener('mouseleave', () => {
+        issueBox.style.borderColor = borderColor;
+        issueBox.style.boxShadow = 'none';
       });
       
-      listItem.appendChild(issueLink);
-      issuesList.appendChild(listItem);
+      issuesContainer.appendChild(issueBox);
     });
     
-    sidebar.appendChild(issuesList);
+    sidebar.appendChild(issuesContainer);
   }
 
   // Create the sidebar
@@ -307,7 +345,7 @@
     
     const button = document.createElement('button');
     button.id = REOPEN_BUTTON_ID;
-    button.setAttribute('aria-label', 'Show issues sidebar');
+    button.setAttribute('aria-label', 'Show comments');
     button.type = 'button';
     button.style.cssText = `
       background: transparent;
@@ -340,8 +378,8 @@
     tooltip.textContent = 'Show issues sidebar';
     tooltip.style.cssText = `
       position: absolute;
-      bottom: calc(100% + 8px);
-      left: 50%;
+      bottom: calc(100% + 2px);
+      left: -50%;
       transform: translateX(-50%);
       background-color: #30363d;
       color: #ffffff;
@@ -370,32 +408,32 @@
       tooltip.style.opacity = '0';
     });
     
-    // Click handler to reopen sidebar
+    // Click handler to toggle sidebar
     button.addEventListener('click', () => {
       const sidebar = document.getElementById(SIDEBAR_ID);
       if (sidebar) {
-        sidebar.style.display = '';
-        matchSidebarHeight();
+        // Toggle visibility
+        const isVisible = sidebar.style.display !== 'none' && 
+                        getComputedStyle(sidebar).display !== 'none';
+        if (isVisible) {
+          sidebar.style.display = 'none';
+        } else {
+          sidebar.style.display = '';
+          matchSidebarHeight();
+        }
       } else {
-        // Sidebar doesn't exist, recreate it
+        // Sidebar doesn't exist, create it
         injectSidebar();
       }
-      updateReopenButtonVisibility();
     });
     
     return button;
   }
 
-  // Update reopen button visibility based on sidebar state
+  // Update reopen button visibility based on sidebar state (no longer needed - button always visible)
   function updateReopenButtonVisibility() {
-    const reopenButton = document.getElementById(REOPEN_BUTTON_ID);
-    if (!reopenButton) return;
-    
-    const sidebar = document.getElementById(SIDEBAR_ID);
-    const isSidebarVisible = sidebar && sidebar.style.display !== 'none' && 
-                            getComputedStyle(sidebar).display !== 'none';
-    
-    reopenButton.style.display = isSidebarVisible ? 'none' : 'inline-flex';
+    // Button is now always visible, no need to update
+    return;
   }
 
   // Add reopen button to toolbar
@@ -415,9 +453,6 @@
     // Create and add button
     const button = createReopenButton();
     toolbar.appendChild(button);
-    
-    // Update visibility based on current sidebar state
-    updateReopenButtonVisibility();
     
     return true;
   }
@@ -515,8 +550,6 @@
       }
       // Update height to match siblings
       matchSidebarHeight();
-      // Update reopen button visibility
-      updateReopenButtonVisibility();
       return;
     }
 
