@@ -39,7 +39,6 @@
     
     sidebar.style.cssText = `
       width: 100px;
-      min-height: 100vh;
       background-color: #ff0000;
       border: 1px solid ${borderColor};
       flex-shrink: 0;
@@ -47,6 +46,7 @@
       border-radius: 6px;
       margin-left: 16px;
       box-sizing: border-box;
+      align-self: flex-start;
     `;
 
     return sidebar;
@@ -54,6 +54,32 @@
 
   // Store original container display style
   let originalContainerDisplay = null;
+
+  // Function to match sidebar height to its sibling
+  function matchSidebarHeight() {
+    const sidebarEl = document.getElementById(SIDEBAR_ID);
+    if (!sidebarEl || !sidebarEl.parentNode) return;
+    
+    // Get all children except the sidebar
+    const siblings = Array.from(sidebarEl.parentNode.children).filter(
+      child => child.id !== SIDEBAR_ID
+    );
+    
+    if (siblings.length > 0) {
+      // Find the tallest sibling (usually the code display container)
+      let maxHeight = 0;
+      siblings.forEach(sibling => {
+        const height = sibling.offsetHeight;
+        if (height > maxHeight) {
+          maxHeight = height;
+        }
+      });
+      
+      if (maxHeight > 0) {
+        sidebarEl.style.height = maxHeight + 'px';
+      }
+    }
+  }
 
   // Inject sidebar if on blob page
   function injectSidebar() {
@@ -87,7 +113,10 @@
           originalContainerDisplay = getComputedStyle(targetContainer).display || '';
         }
         targetContainer.style.display = 'flex';
+        targetContainer.style.alignItems = 'flex-start';
       }
+      // Update height to match siblings
+      matchSidebarHeight();
       return;
     }
 
@@ -103,10 +132,33 @@
 
     // Make container a flex container to position items horizontally
     targetContainer.style.display = 'flex';
+    targetContainer.style.alignItems = 'flex-start';
+
+    // Make container a flex container to position items horizontally
+    targetContainer.style.display = 'flex';
+    targetContainer.style.alignItems = 'flex-start';
 
     // Create and append sidebar as the last child (will appear on the right)
     const sidebar = createSidebar();
     targetContainer.appendChild(sidebar);
+    
+    // Set height initially and observe for changes
+    matchSidebarHeight();
+    
+    // Use ResizeObserver to update height when sibling changes
+    if (window.ResizeObserver) {
+      const resizeObserver = new ResizeObserver(() => {
+        matchSidebarHeight();
+      });
+      
+      // Observe all siblings
+      const siblings = Array.from(targetContainer.children).filter(
+        child => child.id !== SIDEBAR_ID
+      );
+      siblings.forEach(sibling => {
+        resizeObserver.observe(sibling);
+      });
+    }
   }
 
   // Initial injection
