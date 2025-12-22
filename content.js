@@ -9,6 +9,19 @@
     return window.location.pathname.includes('/blob/');
   }
 
+  // Extract repository owner and name from GitHub URL
+  function getRepoInfo() {
+    const pathParts = window.location.pathname.split('/').filter(part => part);
+    // URL pattern: /{owner}/{repo}/blob/...
+    if (pathParts.length >= 2) {
+      return {
+        owner: pathParts[0],
+        repo: pathParts[1]
+      };
+    }
+    return null;
+  }
+
   // Find the target container (the div with class Box-sc-62in7e-0 hGzGyY)
   function findTargetContainer() {
     // Find the div with both classes Box-sc-62in7e-0 and hGzGyY
@@ -17,7 +30,143 @@
     return containers.length > 0 ? containers[0] : null;
   }
 
-  // Create the red sidebar
+  // Detect theme mode
+  function isDarkMode() {
+    return document.documentElement.getAttribute('data-color-mode') === 'dark' ||
+           document.documentElement.classList.contains('dark') ||
+           window.matchMedia('(prefers-color-scheme: dark)').matches;
+  }
+
+  // Render issues list in sidebar
+  function renderIssues(sidebar, issues, error = null) {
+    // Clear existing content
+    sidebar.innerHTML = '';
+    
+    // Detect theme
+    const dark = isDarkMode();
+    const textColor = dark ? '#c9d1d9' : '#24292f';
+    const borderColor = dark ? '#30363d' : '#d0d7de';
+    const bgColor = dark ? '#0d1117' : '#ffffff';
+    const hoverBgColor = dark ? '#161b22' : '#f6f8fa';
+    
+    // Set sidebar styles
+    sidebar.style.cssText = `
+      width: 300px;
+      background-color: ${bgColor};
+      border: 1px solid ${borderColor};
+      flex-shrink: 0;
+      padding: 16px;
+      border-radius: 6px;
+      margin-left: 16px;
+      box-sizing: border-box;
+      align-self: flex-start;
+      overflow-y: auto;
+      max-height: 100%;
+    `;
+    
+    // Create header
+    const header = document.createElement('h3');
+    header.textContent = 'Issues';
+    header.style.cssText = `
+      font-size: 16px;
+      font-weight: 600;
+      color: ${textColor};
+      margin: 0 0 12px 0;
+      padding-bottom: 8px;
+      border-bottom: 1px solid ${borderColor};
+    `;
+    sidebar.appendChild(header);
+    
+    // Show error state
+    if (error) {
+      const errorDiv = document.createElement('div');
+      errorDiv.style.cssText = `
+        padding: 12px;
+        background-color: ${dark ? '#3d1300' : '#fff4e6'};
+        border: 1px solid ${dark ? '#792e00' : '#ff9800'};
+        border-radius: 6px;
+        color: ${dark ? '#f85149' : '#d1242f'};
+        font-size: 14px;
+      `;
+      errorDiv.textContent = error;
+      sidebar.appendChild(errorDiv);
+      return;
+    }
+    
+    // Show loading state if no issues yet
+    if (!issues) {
+      const loadingDiv = document.createElement('div');
+      loadingDiv.style.cssText = `
+        padding: 12px;
+        color: ${textColor};
+        font-size: 14px;
+        text-align: center;
+      `;
+      loadingDiv.textContent = 'Loading issues...';
+      sidebar.appendChild(loadingDiv);
+      return;
+    }
+    
+    // Show empty state
+    if (issues.length === 0) {
+      const emptyDiv = document.createElement('div');
+      emptyDiv.style.cssText = `
+        padding: 12px;
+        color: ${dark ? '#8b949e' : '#656d76'};
+        font-size: 14px;
+        text-align: center;
+      `;
+      emptyDiv.textContent = 'No issues found';
+      sidebar.appendChild(emptyDiv);
+      return;
+    }
+    
+    // Create issues list
+    const issuesList = document.createElement('ul');
+    issuesList.style.cssText = `
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    `;
+    
+    issues.forEach(issue => {
+      const listItem = document.createElement('li');
+      listItem.style.cssText = `
+        margin-bottom: 8px;
+      `;
+      
+      const issueLink = document.createElement('a');
+      issueLink.href = issue.html_url;
+      issueLink.target = '_blank';
+      issueLink.rel = 'noopener noreferrer';
+      issueLink.textContent = `#${issue.number}: ${issue.title}`;
+      issueLink.style.cssText = `
+        display: block;
+        padding: 8px 12px;
+        color: ${textColor};
+        text-decoration: none;
+        border-radius: 6px;
+        font-size: 13px;
+        line-height: 1.4;
+        transition: background-color 0.2s;
+      `;
+      
+      issueLink.addEventListener('mouseenter', () => {
+        issueLink.style.backgroundColor = hoverBgColor;
+      });
+      
+      issueLink.addEventListener('mouseleave', () => {
+        issueLink.style.backgroundColor = 'transparent';
+      });
+      
+      listItem.appendChild(issueLink);
+      issuesList.appendChild(listItem);
+    });
+    
+    sidebar.appendChild(issuesList);
+  }
+
+  // Create the sidebar
   function createSidebar() {
     // Remove existing sidebar if present
     const existing = document.getElementById(SIDEBAR_ID);
@@ -29,31 +178,54 @@
     const sidebar = document.createElement('div');
     sidebar.id = SIDEBAR_ID;
     
-    // Detect if dark mode is active for border color
-    const isDarkMode = document.documentElement.getAttribute('data-color-mode') === 'dark' ||
-                       document.documentElement.classList.contains('dark') ||
-                       window.matchMedia('(prefers-color-scheme: dark)').matches;
+    // Show loading state initially
+    renderIssues(sidebar, null);
     
-    // Use GitHub-like border color that adapts to theme
-    const borderColor = isDarkMode ? '#30363d' : '#d0d7de';
-    
-    sidebar.style.cssText = `
-      width: 100px;
-      background-color: #ff0000;
-      border: 1px solid ${borderColor};
-      flex-shrink: 0;
-      padding: 16px;
-      border-radius: 6px;
-      margin-left: 16px;
-      box-sizing: border-box;
-      align-self: flex-start;
-    `;
+    // Fetch and display issues
+    const repoInfo = getRepoInfo();
+    if (repoInfo) {
+      fetchIssues(repoInfo.owner, repoInfo.repo)
+        .then(issues => {
+          renderIssues(sidebar, issues);
+        })
+        .catch(error => {
+          renderIssues(sidebar, null, error.message);
+        });
+    } else {
+      renderIssues(sidebar, null, 'Could not determine repository');
+    }
 
     return sidebar;
   }
 
   // Store original container display style
   let originalContainerDisplay = null;
+
+  // Fetch issues from GitHub API
+  async function fetchIssues(owner, repo) {
+    try {
+      const url = `https://api.github.com/repos/${owner}/${repo}/issues?state=all&per_page=100&sort=created&direction=desc`;
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        if (response.status === 429) {
+          throw new Error('Rate limit exceeded. Please try again later.');
+        }
+        if (response.status === 404) {
+          throw new Error('Repository not found or is private.');
+        }
+        throw new Error(`Failed to fetch issues: ${response.status} ${response.statusText}`);
+      }
+      
+      const issues = await response.json();
+      // Filter out pull requests (issues have pull_request property when they're PRs)
+      const actualIssues = issues.filter(issue => !issue.pull_request);
+      return actualIssues;
+    } catch (error) {
+      console.error('Error fetching issues:', error);
+      throw error;
+    }
+  }
 
   // Function to match sidebar height to its sibling
   function matchSidebarHeight() {
@@ -129,10 +301,6 @@
     if (originalContainerDisplay === null) {
       originalContainerDisplay = getComputedStyle(targetContainer).display || '';
     }
-
-    // Make container a flex container to position items horizontally
-    targetContainer.style.display = 'flex';
-    targetContainer.style.alignItems = 'flex-start';
 
     // Make container a flex container to position items horizontally
     targetContainer.style.display = 'flex';
