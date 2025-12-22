@@ -45,6 +45,52 @@
            window.matchMedia('(prefers-color-scheme: dark)').matches;
   }
 
+  // Extract current file path from blob page URL
+  function getCurrentFilePath() {
+    if (!isBlobPage()) {
+      return null;
+    }
+    
+    const pathname = window.location.pathname;
+    // Pattern: /{owner}/{repo}/blob/{ref}/{filepath}
+    const blobMatch = pathname.match(/\/blob\/[^\/]+\/(.+)$/);
+    
+    if (blobMatch && blobMatch[1]) {
+      return blobMatch[1];
+    }
+    
+    return null;
+  }
+
+  // Extract file path from blob URL
+  function extractFilePathFromBlobUrl(blobUrl) {
+    if (!blobUrl) {
+      return null;
+    }
+    
+    // Pattern: https://github.com/{owner}/{repo}/blob/{ref}/{filepath}#L{number}
+    const match = blobUrl.match(/\/blob\/[^\/]+\/([^#]+)/);
+    
+    if (match && match[1]) {
+      return match[1];
+    }
+    
+    return null;
+  }
+
+  // Extract filename with extension from file path
+  function extractFilename(filePath) {
+    if (!filePath) {
+      return null;
+    }
+    
+    // Get filename (text after last slash)
+    const lastSlashIndex = filePath.lastIndexOf('/');
+    const filename = lastSlashIndex >= 0 ? filePath.substring(lastSlashIndex + 1) : filePath;
+    
+    return filename;
+  }
+
   // Extract GitHub blob URL with line number from issue body
   function extractBlobUrl(issueBody) {
     if (!issueBody) {
@@ -61,6 +107,45 @@
     }
     
     return null;
+  }
+
+  // Group issues by file path
+  function groupIssuesByFile(issues, currentFilePath) {
+    const groups = {};
+    
+    issues.forEach(issue => {
+      const blobUrl = extractBlobUrl(issue.body);
+      let filePath = null;
+      
+      if (blobUrl) {
+        filePath = extractFilePathFromBlobUrl(blobUrl);
+      }
+      
+      // Use file path as key, or "other" for issues without file references
+      const key = filePath || 'other';
+      
+      if (!groups[key]) {
+        groups[key] = [];
+      }
+      groups[key].push(issue);
+    });
+    
+    // Sort group keys: current file first, then others alphabetically
+    const sortedKeys = Object.keys(groups).sort((a, b) => {
+      if (a === currentFilePath) return -1;
+      if (b === currentFilePath) return 1;
+      if (a === 'other') return 1;
+      if (b === 'other') return -1;
+      return a.localeCompare(b);
+    });
+    
+    // Return sorted groups object
+    const sortedGroups = {};
+    sortedKeys.forEach(key => {
+      sortedGroups[key] = groups[key];
+    });
+    
+    return sortedGroups;
   }
 
   // Extract and clean issue body text, removing blob URLs
@@ -240,6 +325,10 @@
       return;
     }
     
+    // Get current file path and group issues by file
+    const currentFilePath = getCurrentFilePath();
+    const groupedIssues = groupIssuesByFile(openIssues, currentFilePath);
+    
     // Create issues container
     const issuesContainer = document.createElement('div');
     issuesContainer.style.cssText = `
@@ -248,59 +337,103 @@
       gap: 8px;
     `;
     
-    openIssues.forEach(issue => {
-      // Extract blob URL from issue body, fallback to issue URL
-      const blobUrl = extractBlobUrl(issue.body);
-      const linkUrl = blobUrl || issue.html_url;
+    // Iterate over grouped issues
+    const fileGroups = Object.keys(groupedIssues);
+    fileGroups.forEach((filePath, index) => {
+      const fileIssues = groupedIssues[filePath];
       
-      // Extract and clean body text
-      const bodyText = extractBodyText(issue.body);
-      
-      // Skip if body is empty after cleaning
-      if (!bodyText) {
+      // Skip empty groups
+      if (fileIssues.length === 0) {
         return;
       }
       
-      // Create box/link element
-      const issueBox = document.createElement('a');
-      issueBox.href = linkUrl;
-      issueBox.target = '_blank';
-      issueBox.rel = 'noopener noreferrer';
-      issueBox.textContent = bodyText;
-      issueBox.style.cssText = `
-        display: block;
-        background-color: ${dark ? '#21262d' : '#ffffff'};
-        border: 1px solid ${borderColor};
-        border-radius: 6px;
-        padding: 12px;
+      // Create header for file group
+      const headerDiv = document.createElement('div');
+      let headerText;
+      
+      if (filePath === 'other') {
+        headerText = 'Other issues';
+      } else {
+        headerText = extractFilename(filePath) || filePath;
+      }
+      
+      headerDiv.textContent = headerText;
+      headerDiv.style.cssText = `
+        font-size: 14px;
+        font-weight: 600;
         color: ${textColor};
-        text-decoration: none;
-        font-size: 13px;
-        line-height: 1.5;
-        cursor: pointer;
-        transition: border-color 0.2s, box-shadow 0.2s;
-        overflow: hidden;
-        max-height: 45.5px;
-        word-wrap: break-word;
+        ${index > 0 ? 'margin-top: 16px;' : ''}
+        margin-bottom: 8px;
+        padding: 0 4px;
+        text-align: center;
       `;
       
-      issueBox.addEventListener('mouseenter', () => {
-        issueBox.style.borderColor = dark ? '#30363d' : '#d0d7de';
-        issueBox.style.boxShadow = dark ? '0 1px 3px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.1)';
-        issueBox.style.maxHeight = 'none';
-        issueBox.style.zIndex = '1000';
-        issueBox.style.position = 'relative';
-      });
+      // Add divider line below header
+      const dividerDiv = document.createElement('div');
+      dividerDiv.style.cssText = `
+        height: 1px;
+        background-color: ${borderColor};
+        margin-bottom: 8px;
+      `;
       
-      issueBox.addEventListener('mouseleave', () => {
-        issueBox.style.borderColor = borderColor;
-        issueBox.style.boxShadow = 'none';
-        issueBox.style.maxHeight = '45.5px';
-        issueBox.style.zIndex = 'auto';
-        issueBox.style.position = '';
-      });
+      issuesContainer.appendChild(headerDiv);
+      issuesContainer.appendChild(dividerDiv);
       
-      issuesContainer.appendChild(issueBox);
+      // Render issues for this file
+      fileIssues.forEach(issue => {
+        // Extract blob URL from issue body, fallback to issue URL
+        const blobUrl = extractBlobUrl(issue.body);
+        const linkUrl = blobUrl || issue.html_url;
+        
+        // Extract and clean body text
+        const bodyText = extractBodyText(issue.body);
+        
+        // Skip if body is empty after cleaning
+        if (!bodyText) {
+          return;
+        }
+        
+        // Create box/link element
+        const issueBox = document.createElement('a');
+        issueBox.href = linkUrl;
+        issueBox.target = '_blank';
+        issueBox.rel = 'noopener noreferrer';
+        issueBox.textContent = bodyText;
+        issueBox.style.cssText = `
+          display: block;
+          background-color: ${dark ? '#21262d' : '#ffffff'};
+          border: 1px solid ${borderColor};
+          border-radius: 6px;
+          padding: 12px;
+          color: ${textColor};
+          text-decoration: none;
+          font-size: 13px;
+          line-height: 1.5;
+          cursor: pointer;
+          transition: border-color 0.2s, box-shadow 0.2s;
+          overflow: hidden;
+          max-height: 45.5px;
+          word-wrap: break-word;
+        `;
+        
+        issueBox.addEventListener('mouseenter', () => {
+          issueBox.style.borderColor = dark ? '#30363d' : '#d0d7de';
+          issueBox.style.boxShadow = dark ? '0 1px 3px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.1)';
+          issueBox.style.maxHeight = 'none';
+          issueBox.style.zIndex = '1000';
+          issueBox.style.position = 'relative';
+        });
+        
+        issueBox.addEventListener('mouseleave', () => {
+          issueBox.style.borderColor = borderColor;
+          issueBox.style.boxShadow = 'none';
+          issueBox.style.maxHeight = '45.5px';
+          issueBox.style.zIndex = 'auto';
+          issueBox.style.position = '';
+        });
+        
+        issuesContainer.appendChild(issueBox);
+      });
     });
     
     sidebar.appendChild(issuesContainer);
