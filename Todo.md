@@ -1,13 +1,8 @@
 - can I close the issue from the comment?
-- add a comment icon to the relevant line, right most side, mouse over shows the comment.
-- can I show comment icon on all lines in the file?
-- Can I link to multiple lines in an issue?
-- Tryk comment i samme fil, scrolle til linje i stedet for reload?
 - Noget notifications på forsiden? Eller står r tak på issue tab?
 
 ## Feature Suggestions for Student Feedback Review
 
-- Jump to Next/Previous Issue - Add navigation buttons to move between issues, auto-scroll to relevant line
 - Issue Status Indicators - Visual distinction between open/closed issues, filter toggle for open-only
 - Mark as Reviewed/Read - Store locally which issues student has reviewed, show unread count badges
 - Quick Summary View - Show total issue count, count per file in headers, statistics like "5 open issues, 3 in current file"

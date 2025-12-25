@@ -247,6 +247,9 @@
   // Store reference to currently highlighted line for cleanup
   let highlightedLineElement = null;
   let highlightTimeout = null;
+  
+  // Store reference to last clicked comment box
+  let lastClickedCommentBox = null;
 
   // Scroll to a specific line number
   function scrollToLine(lineNumber) {
@@ -296,10 +299,11 @@
     lineElement.classList.add('github-issues-line-highlight');
     highlightedLineElement = lineElement;
     
-    // Create style for highlight if it doesn't exist
+    // Create style for highlight and last-clicked indicator if it doesn't exist
     if (!document.getElementById('github-issues-highlight-style')) {
       const style = document.createElement('style');
       style.id = 'github-issues-highlight-style';
+      const isDark = isDarkMode();
       style.textContent = `
         .github-issues-line-highlight {
           background-color: rgba(255, 223, 93, 0.2) !important;
@@ -307,6 +311,10 @@
         }
         .github-issues-line-highlight td {
           background-color: rgba(255, 223, 93, 0.2) !important;
+        }
+        .github-issues-last-clicked {
+          border-left: 3px solid ${isDark ? '#58a6ff' : '#0969da'} !important;
+          background-color: ${isDark ? 'rgba(88, 166, 255, 0.1)' : 'rgba(9, 105, 218, 0.08)'} !important;
         }
       `;
       document.head.appendChild(style);
@@ -556,6 +564,9 @@
   function renderIssues(sidebar, issues, error = null) {
     // Clear existing content
     sidebar.innerHTML = '';
+    
+    // Reset last clicked comment reference when re-rendering
+    lastClickedCommentBox = null;
     
     // Detect theme
     const dark = isDarkMode();
@@ -882,6 +893,15 @@
         
         // Add click handler to intercept navigation if link points to current file
         issueBox.addEventListener('click', (e) => {
+          // Remove indicator from previously clicked comment
+          if (lastClickedCommentBox) {
+            lastClickedCommentBox.classList.remove('github-issues-last-clicked');
+          }
+          
+          // Add indicator to current clicked comment
+          issueBox.classList.add('github-issues-last-clicked');
+          lastClickedCommentBox = issueBox;
+          
           // Check if this link points to the current file
           if (blobUrl && isLinkInCurrentFile(blobUrl)) {
             // Prevent default navigation
