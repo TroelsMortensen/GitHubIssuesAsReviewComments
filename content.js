@@ -235,24 +235,24 @@
     iconContainer.setAttribute('data-line-number', lineNumber);
     iconContainer.style.cssText = `
       position: absolute;
-      right: 0;
+      right: -10px;
       top: 0;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 16px;
-      height: 16px;
+      width: 24px;
+      height: 24px;
       cursor: pointer;
       z-index: 10;
     `;
     
     // Create icon image
     const icon = document.createElement('img');
-    icon.src = chrome.runtime.getURL('icons/icon48.png');
+    icon.src = chrome.runtime.getURL('icons/CommentIcon.png');
     icon.alt = 'Issues';
     icon.style.cssText = `
-      width: 16px;
-      height: 16px;
+      width: 24px;
+      height: 24px;
       opacity: 0.7;
       transition: opacity 0.2s;
     `;
