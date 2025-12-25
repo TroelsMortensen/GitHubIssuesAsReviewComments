@@ -904,7 +904,59 @@
           overflow: hidden;
           max-height: 45.5px;
           word-wrap: break-word;
+          position: relative;
         `;
+          
+          // Create icon button for opening issue in new tab
+          const issueIconButton = document.createElement('button');
+          issueIconButton.innerHTML = '↗';
+          issueIconButton.setAttribute('aria-label', 'Open issue in new tab');
+          issueIconButton.title = 'Open issue in new tab';
+          issueIconButton.style.cssText = `
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 20px;
+            height: 20px;
+            background-color: ${dark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)'};
+            border: none;
+            border-radius: 4px;
+            color: ${dark ? '#8b949e' : '#656d76'};
+            font-size: 12px;
+            line-height: 1;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            z-index: 10;
+            opacity: 0;
+            transition: opacity 0.2s, background-color 0.2s;
+          `;
+          
+          // Hover effects for icon
+          issueIconButton.addEventListener('mouseenter', () => {
+            issueIconButton.style.opacity = '1';
+            issueIconButton.style.backgroundColor = dark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.1)';
+          });
+          
+          issueIconButton.addEventListener('mouseleave', () => {
+            // Only hide if not hovering over the comment box
+            if (!issueBox.matches(':hover')) {
+              issueIconButton.style.opacity = '0';
+            }
+            issueIconButton.style.backgroundColor = dark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)';
+          });
+          
+          // Click handler to open issue in new window
+          issueIconButton.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            window.open(issue.html_url, '_blank', 'noopener,noreferrer,width=1200,height=800');
+          });
+          
+          // Append icon to issue box
+          issueBox.appendChild(issueIconButton);
         
         // Add click handler to intercept navigation if link points to current file
         issueBox.addEventListener('click', (e) => {
@@ -951,6 +1003,11 @@
           issueBox.style.maxHeight = 'none';
           issueBox.style.zIndex = '1000';
           issueBox.style.position = 'relative';
+          // Show icon when hovering over comment box
+          const iconButton = issueBox.querySelector('button[aria-label="Open issue in new tab"]');
+          if (iconButton) {
+            iconButton.style.opacity = '0.7';
+          }
         });
         
         issueBox.addEventListener('mouseleave', () => {
@@ -959,6 +1016,11 @@
           issueBox.style.maxHeight = '45.5px';
           issueBox.style.zIndex = 'auto';
           issueBox.style.position = '';
+          // Hide icon when leaving comment box (unless hovering over icon)
+          const iconButton = issueBox.querySelector('button[aria-label="Open issue in new tab"]');
+          if (iconButton && !iconButton.matches(':hover')) {
+            iconButton.style.opacity = '0';
+          }
         });
         
           issuesContainer.appendChild(issueBox);

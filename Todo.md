@@ -1,5 +1,5 @@
 - can I close the issue from the comment? - no
-- Noget notifications på forsiden? Eller står r tak på issue tab?
+- Noget notifications på forsiden? Eller står der talq   på issue tab?
 - Tilføj ikon, der åbner issue i ny window, så det er hurtigt lige at close, uden at miste, hvor man var.
 
 
