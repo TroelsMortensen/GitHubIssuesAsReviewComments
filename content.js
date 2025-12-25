@@ -236,12 +236,11 @@
     iconContainer.style.cssText = `
       position: absolute;
       right: -10px;
-      top: 0;
+      top: 5px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 24px;
-      height: 24px;
+      width: 16px;
       cursor: pointer;
       z-index: 10;
     `;
@@ -251,8 +250,7 @@
     icon.src = chrome.runtime.getURL('icons/CommentIcon.png');
     icon.alt = 'Issues';
     icon.style.cssText = `
-      width: 24px;
-      height: 24px;
+      width: 16px;
       opacity: 0.7;
       transition: opacity 0.2s;
     `;
