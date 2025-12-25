@@ -81,6 +81,26 @@
     return null;
   }
 
+  // Check if blob URL points to the current file
+  function isLinkInCurrentFile(blobUrl) {
+    if (!blobUrl) {
+      return false;
+    }
+    
+    const currentFilePath = getCurrentFilePath();
+    if (!currentFilePath) {
+      return false;
+    }
+    
+    const linkFilePath = extractFilePathFromBlobUrl(blobUrl);
+    if (!linkFilePath) {
+      return false;
+    }
+    
+    // Compare file paths (they should match exactly)
+    return linkFilePath === currentFilePath;
+  }
+
   // Extract filename with extension from file path
   function extractFilename(filePath) {
     if (!filePath) {
@@ -222,6 +242,84 @@
     }
     
     return [];
+  }
+
+  // Store reference to currently highlighted line for cleanup
+  let highlightedLineElement = null;
+  let highlightTimeout = null;
+
+  // Scroll to a specific line number
+  function scrollToLine(lineNumber) {
+    if (!lineNumber) {
+      return false;
+    }
+    
+    // Find the line element by data-line-number attribute
+    const lineElement = document.querySelector(`[data-line-number="${lineNumber}"]`);
+    if (!lineElement) {
+      return false;
+    }
+    
+    // Scroll to the element smoothly
+    lineElement.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center'
+    });
+    
+    return true;
+  }
+
+  // Highlight a line with GitHub-like yellow highlight
+  function highlightLine(lineNumber) {
+    if (!lineNumber) {
+      return;
+    }
+    
+    // Clear any existing highlight
+    if (highlightedLineElement) {
+      highlightedLineElement.classList.remove('github-issues-line-highlight');
+      highlightedLineElement = null;
+    }
+    
+    if (highlightTimeout) {
+      clearTimeout(highlightTimeout);
+      highlightTimeout = null;
+    }
+    
+    // Find the line element
+    const lineElement = document.querySelector(`[data-line-number="${lineNumber}"]`);
+    if (!lineElement) {
+      return;
+    }
+    
+    // Add highlight class
+    lineElement.classList.add('github-issues-line-highlight');
+    highlightedLineElement = lineElement;
+    
+    // Create style for highlight if it doesn't exist
+    if (!document.getElementById('github-issues-highlight-style')) {
+      const style = document.createElement('style');
+      style.id = 'github-issues-highlight-style';
+      style.textContent = `
+        .github-issues-line-highlight {
+          background-color: rgba(255, 223, 93, 0.2) !important;
+          transition: background-color 0.5s ease-out;
+        }
+        .github-issues-line-highlight td {
+          background-color: rgba(255, 223, 93, 0.2) !important;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    
+    // Remove highlight after 3 seconds
+    highlightTimeout = setTimeout(() => {
+      if (highlightedLineElement) {
+        highlightedLineElement.classList.remove('github-issues-line-highlight');
+        highlightedLineElement = null;
+      }
+      highlightTimeout = null;
+    }, 3000);
   }
 
   // Create line icon with tooltip showing issue bodies
@@ -782,6 +880,30 @@
           word-wrap: break-word;
         `;
         
+        // Add click handler to intercept navigation if link points to current file
+        issueBox.addEventListener('click', (e) => {
+          // Check if this link points to the current file
+          if (blobUrl && isLinkInCurrentFile(blobUrl)) {
+            // Prevent default navigation
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // Extract line number and scroll/highlight
+            const targetLineNumber = extractLineNumber(blobUrl);
+            if (targetLineNumber) {
+              // Update URL hash to reflect the line number
+              window.history.replaceState(null, '', `#L${targetLineNumber}`);
+              
+              // Small delay to ensure DOM is ready
+              setTimeout(() => {
+                scrollToLine(targetLineNumber);
+                highlightLine(targetLineNumber);
+              }, 50);
+            }
+          }
+          // If not current file, allow default behavior (opens in new tab)
+        });
+        
         issueBox.addEventListener('mouseenter', () => {
           issueBox.style.borderColor = dark ? '#30363d' : '#d0d7de';
           issueBox.style.boxShadow = dark ? '0 1px 3px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.1)';
@@ -1245,5 +1367,41 @@
   // Handle hash changes (line navigation)
   window.addEventListener('hashchange', () => {
     tryInjectLineIcons();
+    
+    // Extract line number from hash and highlight
+    const hash = window.location.hash;
+    if (hash) {
+      const lineMatch = hash.match(/#L(\d+)(?:-L\d+)?/);
+      if (lineMatch && lineMatch[1]) {
+        const lineNumber = parseInt(lineMatch[1], 10);
+        setTimeout(() => {
+          scrollToLine(lineNumber);
+          highlightLine(lineNumber);
+        }, 100);
+      }
+    }
   });
+
+  // Handle initial page load with hash
+  function handleInitialHash() {
+    const hash = window.location.hash;
+    if (hash) {
+      const lineMatch = hash.match(/#L(\d+)(?:-L\d+)?/);
+      if (lineMatch && lineMatch[1]) {
+        const lineNumber = parseInt(lineMatch[1], 10);
+        // Wait a bit for DOM to be ready
+        setTimeout(() => {
+          scrollToLine(lineNumber);
+          highlightLine(lineNumber);
+        }, 500);
+      }
+    }
+  }
+
+  // Call on initial load
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', handleInitialHash);
+  } else {
+    handleInitialHash();
+  }
 })();

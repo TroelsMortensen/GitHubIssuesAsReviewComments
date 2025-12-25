@@ -2,3 +2,16 @@
 - add a comment icon to the relevant line, right most side, mouse over shows the comment.
 - can I show comment icon on all lines in the file?
 - Can I link to multiple lines in an issue?
+- Tryk comment i samme fil, scrolle til linje i stedet for reload?
+- Noget notifications på forsiden? Eller står r tak på issue tab?
+
+## Feature Suggestions for Student Feedback Review
+
+- Jump to Next/Previous Issue - Add navigation buttons to move between issues, auto-scroll to relevant line
+- Issue Status Indicators - Visual distinction between open/closed issues, filter toggle for open-only
+- Mark as Reviewed/Read - Store locally which issues student has reviewed, show unread count badges
+- Quick Summary View - Show total issue count, count per file in headers, statistics like "5 open issues, 3 in current file"
+- Search/Filter - Search box to filter issues by text content, filter by line number range, filter by GitHub labels
+- Keyboard Shortcuts - Arrow keys to navigate between issues, Enter to jump to code location, Esc to close sidebar
+- Highlight Unaddressed Issues - Highlight issues with specific labels (e.g., "needs-fix", "critical"), sort critical issues first
+- Export/Print Summary - Button to generate text summary of all feedback for offline review 
