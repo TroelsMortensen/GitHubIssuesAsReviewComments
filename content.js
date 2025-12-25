@@ -196,6 +196,11 @@
     }
     
     issues.forEach(issue => {
+      // Only include open issues
+      if (issue.state !== 'open') {
+        return;
+      }
+      
       const blobUrl = extractBlobUrl(issue.body);
       if (!blobUrl) {
         return;
@@ -875,7 +880,6 @@
           // Create box/link element
           const issueBox = document.createElement('a');
           issueBox.href = linkUrl;
-          issueBox.target = '_blank';
           issueBox.rel = 'noopener noreferrer';
           issueBox.textContent = bodyText;
           
