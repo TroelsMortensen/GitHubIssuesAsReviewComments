@@ -1,6 +1,8 @@
 - can I close the issue from the comment? - no
 - Noget notifications på forsiden? Eller står der talq   på issue tab?
 - Tilføj ikon, der åbner issue i ny window, så det er hurtigt lige at close, uden at miste, hvor man var.
+- Extension icon can toggle om extension er aktiv eller ej.
+- I need a refresh button, to refresh the issues list.
 
 
 ## Feature Suggestions for Student Feedback Review
