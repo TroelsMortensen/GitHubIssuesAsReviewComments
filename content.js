@@ -790,91 +790,102 @@
       gap: 8px;
     `;
     
-    // Iterate over grouped issues
-    const fileGroups = Object.keys(groupedIssues);
-    fileGroups.forEach((filePath, index) => {
-      const fileIssues = groupedIssues[filePath];
+    // Get last clicked comment from storage first (before rendering)
+    chrome.storage.local.get(['lastClickedComment'], (result) => {
+      const lastClickedUrl = result.lastClickedComment;
       
-      // Skip empty groups
-      if (fileIssues.length === 0) {
-        return;
-      }
-      
-      // Create header for file group
-      const headerDiv = document.createElement('div');
-      let headerText;
-      
-      if (filePath === 'other') {
-        headerText = 'Other issues';
-      } else {
-        headerText = extractFilename(filePath) || filePath;
-      }
-      
-      headerDiv.textContent = headerText;
-      headerDiv.style.cssText = `
-        font-size: 14px;
-        font-weight: 600;
-        color: ${textColor};
-        ${index > 0 ? 'margin-top: 16px;' : ''}
-        margin-bottom: 8px;
-        padding: 0 4px;
-        text-align: center;
-      `;
-      
-      // Add divider line below header
-      const dividerDiv = document.createElement('div');
-      dividerDiv.style.cssText = `
-        height: 1px;
-        background-color: ${borderColor};
-        margin-bottom: 8px;
-      `;
-      
-      issuesContainer.appendChild(headerDiv);
-      issuesContainer.appendChild(dividerDiv);
-      
-      // Sort issues by line number
-      const sortedFileIssues = fileIssues.slice().sort((a, b) => {
-        const blobUrlA = extractBlobUrl(a.body);
-        const blobUrlB = extractBlobUrl(b.body);
-        const lineNumberA = blobUrlA ? extractLineNumber(blobUrlA) : null;
-        const lineNumberB = blobUrlB ? extractLineNumber(blobUrlB) : null;
+      // Iterate over grouped issues
+      const fileGroups = Object.keys(groupedIssues);
+      fileGroups.forEach((filePath, index) => {
+        const fileIssues = groupedIssues[filePath];
         
-        // Issues without line numbers go to the end
-        if (lineNumberA === null && lineNumberB === null) return 0;
-        if (lineNumberA === null) return 1;
-        if (lineNumberB === null) return -1;
-        
-        // Sort by line number
-        return lineNumberA - lineNumberB;
-      });
-      
-      // Render issues for this file
-      sortedFileIssues.forEach(issue => {
-        // Extract blob URL from issue body, fallback to issue URL
-        const blobUrl = extractBlobUrl(issue.body);
-        const linkUrl = blobUrl || issue.html_url;
-        
-        // Extract and clean body text
-        let bodyText = extractBodyText(issue.body);
-        
-        // Skip if body is empty after cleaning
-        if (!bodyText) {
+        // Skip empty groups
+        if (fileIssues.length === 0) {
           return;
         }
         
-        // Extract line number and prefix body text
-        const lineNumber = blobUrl ? extractLineNumber(blobUrl) : null;
-        if (lineNumber !== null) {
-          bodyText = `${lineNumber}: ${bodyText}`;
+        // Create header for file group
+        const headerDiv = document.createElement('div');
+        let headerText;
+        
+        if (filePath === 'other') {
+          headerText = 'Other issues';
+        } else {
+          headerText = extractFilename(filePath) || filePath;
         }
         
-        // Create box/link element
-        const issueBox = document.createElement('a');
-        issueBox.href = linkUrl;
-        issueBox.target = '_blank';
-        issueBox.rel = 'noopener noreferrer';
-        issueBox.textContent = bodyText;
-        issueBox.style.cssText = `
+        headerDiv.textContent = headerText;
+        headerDiv.style.cssText = `
+          font-size: 14px;
+          font-weight: 600;
+          color: ${textColor};
+          ${index > 0 ? 'margin-top: 16px;' : ''}
+          margin-bottom: 8px;
+          padding: 0 4px;
+          text-align: center;
+        `;
+        
+        // Add divider line below header
+        const dividerDiv = document.createElement('div');
+        dividerDiv.style.cssText = `
+          height: 1px;
+          background-color: ${borderColor};
+          margin-bottom: 8px;
+        `;
+        
+        issuesContainer.appendChild(headerDiv);
+        issuesContainer.appendChild(dividerDiv);
+        
+        // Sort issues by line number
+        const sortedFileIssues = fileIssues.slice().sort((a, b) => {
+          const blobUrlA = extractBlobUrl(a.body);
+          const blobUrlB = extractBlobUrl(b.body);
+          const lineNumberA = blobUrlA ? extractLineNumber(blobUrlA) : null;
+          const lineNumberB = blobUrlB ? extractLineNumber(blobUrlB) : null;
+          
+          // Issues without line numbers go to the end
+          if (lineNumberA === null && lineNumberB === null) return 0;
+          if (lineNumberA === null) return 1;
+          if (lineNumberB === null) return -1;
+          
+          // Sort by line number
+          return lineNumberA - lineNumberB;
+        });
+        
+        // Render issues for this file
+        sortedFileIssues.forEach(issue => {
+          // Extract blob URL from issue body, fallback to issue URL
+          const blobUrl = extractBlobUrl(issue.body);
+          const linkUrl = blobUrl || issue.html_url;
+          
+          // Extract and clean body text
+          let bodyText = extractBodyText(issue.body);
+          
+          // Skip if body is empty after cleaning
+          if (!bodyText) {
+            return;
+          }
+          
+          // Extract line number and prefix body text
+          const lineNumber = blobUrl ? extractLineNumber(blobUrl) : null;
+          if (lineNumber !== null) {
+            bodyText = `${lineNumber}: ${bodyText}`;
+          }
+          
+          // Create box/link element
+          const issueBox = document.createElement('a');
+          issueBox.href = linkUrl;
+          issueBox.target = '_blank';
+          issueBox.rel = 'noopener noreferrer';
+          issueBox.textContent = bodyText;
+          
+          // Check if this is the last clicked comment and restore indicator
+          if (lastClickedUrl && issue.html_url === lastClickedUrl) {
+            issueBox.classList.add('github-issues-last-clicked');
+            lastClickedCommentBox = issueBox;
+          }
+          
+          issueBox.style.cssText = `
           display: block;
           background-color: ${dark ? '#21262d' : '#ffffff'};
           border: 1px solid ${borderColor};
@@ -893,6 +904,12 @@
         
         // Add click handler to intercept navigation if link points to current file
         issueBox.addEventListener('click', (e) => {
+          // Store which comment was clicked (using issue URL as identifier)
+          const clickedIssueUrl = issue.html_url;
+          
+          // Store immediately (synchronously for navigation case)
+          chrome.storage.local.set({ 'lastClickedComment': clickedIssueUrl });
+          
           // Remove indicator from previously clicked comment
           if (lastClickedCommentBox) {
             lastClickedCommentBox.classList.remove('github-issues-last-clicked');
@@ -921,7 +938,7 @@
               }, 50);
             }
           }
-          // If not current file, allow default behavior (opens in new tab)
+          // If not current file, allow default behavior (navigation happens, indicator will be restored on new page)
         });
         
         issueBox.addEventListener('mouseenter', () => {
@@ -940,11 +957,12 @@
           issueBox.style.position = '';
         });
         
-        issuesContainer.appendChild(issueBox);
+          issuesContainer.appendChild(issueBox);
+        });
       });
+      
+      sidebar.appendChild(issuesContainer);
     });
-    
-    sidebar.appendChild(issuesContainer);
     
     // Store issues for line icon injection
     if (issues && issues.length > 0) {

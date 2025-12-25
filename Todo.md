@@ -1,5 +1,7 @@
 - can I close the issue from the comment?
 - Noget notifications på forsiden? Eller står r tak på issue tab?
+- Tilføj ikon, der åbner issue i ny window, så det er hurtigt lige at close, uden at miste, hvor man var.
+
 
 ## Feature Suggestions for Student Feedback Review
 
