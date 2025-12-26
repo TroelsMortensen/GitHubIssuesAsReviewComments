@@ -830,6 +830,67 @@
     
     buttonContainer.appendChild(clearCacheButton);
     
+    // Create refresh button
+    const refreshButton = document.createElement('button');
+    refreshButton.innerHTML = '↻';
+    refreshButton.setAttribute('aria-label', 'Refresh issues');
+    refreshButton.title = 'Refresh issues';
+    refreshButton.style.cssText = `
+      background: none;
+      border: none;
+      color: ${dark ? '#8b949e' : '#656d76'};
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+      padding: 4px 8px;
+      margin: 0;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      transition: background-color 0.2s, color 0.2s, transform 0.2s;
+    `;
+    
+    // Hover effect for refresh button
+    refreshButton.addEventListener('mouseenter', () => {
+      refreshButton.style.backgroundColor = hoverBgColor;
+      refreshButton.style.color = textColor;
+    });
+    
+    refreshButton.addEventListener('mouseleave', () => {
+      refreshButton.style.backgroundColor = 'transparent';
+      refreshButton.style.color = dark ? '#8b949e' : '#656d76';
+      refreshButton.style.transform = 'rotate(0deg)';
+    });
+    
+    // Refresh functionality
+    refreshButton.addEventListener('click', () => {
+      const repoInfo = getRepoInfo();
+      if (repoInfo) {
+        // Show loading state
+        renderIssues(sidebar, null);
+        // Add rotation animation on click
+        refreshButton.style.transform = 'rotate(360deg)';
+        setTimeout(() => {
+          refreshButton.style.transform = 'rotate(0deg)';
+        }, 500);
+        // Fetch issues (will use cache if available, but force refresh from API)
+        fetchIssues(repoInfo.owner, repoInfo.repo, true) // Pass true to bypass cache
+          .then(issues => {
+            currentIssues = issues;
+            renderIssues(sidebar, issues);
+          })
+          .catch(error => {
+            currentIssues = null;
+            renderIssues(sidebar, null, error.message);
+          });
+      }
+    });
+    
+    buttonContainer.appendChild(refreshButton);
+    
     // Create close button
     const closeButton = document.createElement('button');
     closeButton.innerHTML = '×';
@@ -1432,12 +1493,14 @@
   }
 
   // Fetch issues from GitHub API
-  async function fetchIssues(owner, repo) {
+  async function fetchIssues(owner, repo, bypassCache = false) {
     try {
-      // First, check cache
-      const cachedIssues = await getIssuesFromCache(owner, repo);
-      if (cachedIssues) {
-        return cachedIssues;
+      // First, check cache (unless bypassing)
+      if (!bypassCache) {
+        const cachedIssues = await getIssuesFromCache(owner, repo);
+        if (cachedIssues) {
+          return cachedIssues;
+        }
       }
       
       // Cache miss or expired, fetch from API
