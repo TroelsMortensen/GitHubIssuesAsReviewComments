@@ -8,6 +8,9 @@
   // Store current issues for line icon injection
   let currentIssues = null;
   
+  // Extension enabled state (default to true)
+  let extensionEnabled = true;
+  
   // Check if we're on a blob page
   function isBlobPage() {
     return window.location.pathname.includes('/blob/');
@@ -1392,7 +1395,11 @@
         }
       } else {
         // Sidebar doesn't exist, create it
-        injectSidebar();
+        checkExtensionEnabled().then(isEnabled => {
+          if (isEnabled) {
+            injectSidebar();
+          }
+        });
       }
     });
     
@@ -1557,8 +1564,58 @@
     }
   }
 
+  // Check if extension is enabled
+  async function checkExtensionEnabled() {
+    try {
+      const result = await chrome.storage.local.get(['extensionEnabled']);
+      extensionEnabled = result.extensionEnabled !== false; // Default to true if not set
+      return extensionEnabled;
+    } catch (error) {
+      console.error('Error checking extension state:', error);
+      return true; // Default to enabled on error
+    }
+  }
+
+  // Clean up all extension elements when disabled
+  function cleanupExtension() {
+    // Remove sidebar
+    const sidebar = document.getElementById(SIDEBAR_ID);
+    if (sidebar) {
+      sidebar.remove();
+    }
+    
+    // Remove reopen button
+    const reopenButton = document.getElementById(REOPEN_BUTTON_ID);
+    if (reopenButton) {
+      reopenButton.remove();
+    }
+    
+    // Remove line icons
+    removeLineIcons();
+    
+    // Clear permanent highlights
+    clearPermanentHighlights();
+    
+    // Restore original container styles
+    const targetContainer = findTargetContainer();
+    if (targetContainer && originalContainerDisplay !== null) {
+      targetContainer.style.display = originalContainerDisplay;
+      originalContainerDisplay = null;
+    }
+    
+    // Clear current issues
+    currentIssues = null;
+  }
+
   // Inject sidebar if on blob page
-  function injectSidebar() {
+  async function injectSidebar() {
+    // Check if extension is enabled
+    const isEnabled = await checkExtensionEnabled();
+    if (!isEnabled) {
+      cleanupExtension();
+      return;
+    }
+    
     if (!isBlobPage()) {
       // Remove sidebar if not on blob page
       const existing = document.getElementById(SIDEBAR_ID);
@@ -1664,12 +1721,20 @@
   
   // Fallback: Observe URL changes using MutationObserver on the body
   let lastUrl = location.href;
-  const observer = new MutationObserver(() => {
+  const observer = new MutationObserver(async () => {
     const currentUrl = location.href;
     if (currentUrl !== lastUrl) {
       lastUrl = currentUrl;
       // Small delay to ensure DOM is ready
-      setTimeout(injectSidebar, 100);
+      setTimeout(() => {
+        checkExtensionEnabled().then(isEnabled => {
+          if (isEnabled) {
+            injectSidebar();
+          } else {
+            cleanupExtension();
+          }
+        });
+      }, 100);
     }
   });
 
@@ -1681,7 +1746,15 @@
 
   // Also check on popstate (browser back/forward)
   window.addEventListener('popstate', () => {
-    setTimeout(injectSidebar, 100);
+    setTimeout(() => {
+      checkExtensionEnabled().then(isEnabled => {
+        if (isEnabled) {
+          injectSidebar();
+        } else {
+          cleanupExtension();
+        }
+      });
+    }, 100);
   });
 
   // Function to inject line icons and highlight lines if we have issues

@@ -1,6 +1,5 @@
 - Noget notifications på forsiden? Eller står der talq   på issue tab?
 - Extension icon can toggle om extension er aktiv eller ej.
-- I need a refresh button, to refresh the issues list.
 - kan jeg lave counts på folders og filer i let side project structure view?
 
 
