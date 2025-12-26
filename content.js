@@ -130,6 +130,32 @@
     return null;
   }
 
+  // Extract line range information from blob URL
+  // Returns { start: number, end: number, allLines: [number, ...] } or null
+  function extractLineRange(blobUrl) {
+    if (!blobUrl) {
+      return null;
+    }
+    
+    // Extract line numbers from patterns: #L33 or #L39-L43
+    const lineMatch = blobUrl.match(/#L(\d+)(?:-L(\d+))?/);
+    
+    if (lineMatch && lineMatch[1]) {
+      const start = parseInt(lineMatch[1], 10);
+      const end = lineMatch[2] ? parseInt(lineMatch[2], 10) : start;
+      
+      // Generate array of all line numbers in range
+      const allLines = [];
+      for (let i = start; i <= end; i++) {
+        allLines.push(i);
+      }
+      
+      return { start, end, allLines };
+    }
+    
+    return null;
+  }
+
   // Extract GitHub blob URL with line number from issue body
   function extractBlobUrl(issueBody) {
     if (!issueBody) {
@@ -212,20 +238,66 @@
         return;
       }
       
-      // Extract line number
-      const lineNumber = extractLineNumber(blobUrl);
-      if (lineNumber === null) {
+      // Extract line range
+      const lineRange = extractLineRange(blobUrl);
+      if (lineRange === null) {
         return;
       }
       
-      // Add issue to the line's array
-      if (!lineMap[lineNumber]) {
-        lineMap[lineNumber] = [];
-      }
-      lineMap[lineNumber].push(issue);
+      // Add issue to all lines in the range
+      lineRange.allLines.forEach(lineNumber => {
+        if (!lineMap[lineNumber]) {
+          lineMap[lineNumber] = [];
+        }
+        lineMap[lineNumber].push(issue);
+      });
     });
     
     return lineMap;
+  }
+
+  // Highlight all lines with comments for the current file
+  function highlightAllCommentedLines(issues, currentFilePath) {
+    // Clear existing highlights first
+    clearPermanentHighlights();
+    
+    if (!currentFilePath || !issues || issues.length === 0) {
+      return;
+    }
+    
+    const allLinesToHighlight = new Set();
+    
+    issues.forEach(issue => {
+      // Only include open issues
+      if (issue.state !== 'open') {
+        return;
+      }
+      
+      const blobUrl = extractBlobUrl(issue.body);
+      if (!blobUrl) {
+        return;
+      }
+      
+      // Check if this issue references the current file
+      const filePath = extractFilePathFromBlobUrl(blobUrl);
+      if (filePath !== currentFilePath) {
+        return;
+      }
+      
+      // Extract line range
+      const lineRange = extractLineRange(blobUrl);
+      if (lineRange === null) {
+        return;
+      }
+      
+      // Add all lines in range to the set
+      lineRange.allLines.forEach(lineNumber => {
+        allLinesToHighlight.add(lineNumber);
+      });
+    });
+    
+    // Highlight all lines
+    highlightLinesPermanently(Array.from(allLinesToHighlight));
   }
 
   // Find code line elements in GitHub code viewer
@@ -253,6 +325,9 @@
   let highlightedLineElement = null;
   let highlightTimeout = null;
   
+  // Store set of permanently highlighted line numbers
+  const permanentlyHighlightedLines = new Set();
+  
   // Store reference to last clicked comment box
   let lastClickedCommentBox = null;
 
@@ -277,15 +352,15 @@
     return true;
   }
 
-  // Highlight a line with GitHub-like yellow highlight
+  // Highlight a line with temporary yellow highlight (for click feedback)
   function highlightLine(lineNumber) {
     if (!lineNumber) {
       return;
     }
     
-    // Clear any existing highlight
+    // Clear any existing temporary highlight
     if (highlightedLineElement) {
-      highlightedLineElement.classList.remove('github-issues-line-highlight');
+      highlightedLineElement.classList.remove('github-issues-line-highlight-temp');
       highlightedLineElement = null;
     }
     
@@ -300,22 +375,28 @@
       return;
     }
     
-    // Add highlight class
-    lineElement.classList.add('github-issues-line-highlight');
+    // Add temporary highlight class
+    lineElement.classList.add('github-issues-line-highlight-temp');
     highlightedLineElement = lineElement;
     
-    // Create style for highlight and last-clicked indicator if it doesn't exist
+    // Create style for highlights and last-clicked indicator if it doesn't exist
     if (!document.getElementById('github-issues-highlight-style')) {
       const style = document.createElement('style');
       style.id = 'github-issues-highlight-style';
       const isDark = isDarkMode();
       style.textContent = `
         .github-issues-line-highlight {
-          background-color: rgba(255, 223, 93, 0.2) !important;
-          transition: background-color 0.5s ease-out;
+          background-color: rgba(46, 160, 67, 0.2) !important;
         }
         .github-issues-line-highlight td {
-          background-color: rgba(255, 223, 93, 0.2) !important;
+          background-color: rgba(46, 160, 67, 0.2) !important;
+        }
+        .github-issues-line-highlight-temp {
+          background-color: rgba(255, 223, 93, 0.3) !important;
+          transition: background-color 0.5s ease-out;
+        }
+        .github-issues-line-highlight-temp td {
+          background-color: rgba(255, 223, 93, 0.3) !important;
         }
         .github-issues-last-clicked {
           border-left: 3px solid ${isDark ? '#58a6ff' : '#0969da'} !important;
@@ -325,14 +406,57 @@
       document.head.appendChild(style);
     }
     
-    // Remove highlight after 3 seconds
+    // Remove temporary highlight after 1 second (just a brief flash)
     highlightTimeout = setTimeout(() => {
       if (highlightedLineElement) {
-        highlightedLineElement.classList.remove('github-issues-line-highlight');
+        highlightedLineElement.classList.remove('github-issues-line-highlight-temp');
         highlightedLineElement = null;
       }
       highlightTimeout = null;
-    }, 3000);
+    }, 1000);
+  }
+
+  // Permanently highlight a single line (green)
+  function highlightLinePermanently(lineNumber) {
+    if (!lineNumber) {
+      return;
+    }
+    
+    if (permanentlyHighlightedLines.has(lineNumber)) {
+      return; // Already highlighted
+    }
+    
+    // Find the line element
+    const lineElement = document.querySelector(`[data-line-number="${lineNumber}"]`);
+    if (!lineElement) {
+      return;
+    }
+    
+    // Add permanent highlight class
+    lineElement.classList.add('github-issues-line-highlight');
+    permanentlyHighlightedLines.add(lineNumber);
+  }
+
+  // Permanently highlight multiple lines (green)
+  function highlightLinesPermanently(lineNumbers) {
+    if (!lineNumbers || lineNumbers.length === 0) {
+      return;
+    }
+    
+    lineNumbers.forEach(lineNumber => {
+      highlightLinePermanently(lineNumber);
+    });
+  }
+
+  // Clear all permanent highlights
+  function clearPermanentHighlights() {
+    permanentlyHighlightedLines.forEach(lineNumber => {
+      const lineElement = document.querySelector(`[data-line-number="${lineNumber}"]`);
+      if (lineElement) {
+        lineElement.classList.remove('github-issues-line-highlight');
+      }
+    });
+    permanentlyHighlightedLines.clear();
   }
 
   // Create line icon with tooltip showing issue bodies
@@ -503,13 +627,36 @@
         return;
       }
       
+      // Filter issues to only include those where this line is the start of the range
+      // This ensures icons only appear on the first line of multi-line ranges
+      const issuesForIcon = lineIssues.filter(issue => {
+        const blobUrl = extractBlobUrl(issue.body);
+        if (!blobUrl) {
+          return false;
+        }
+        
+        const lineRange = extractLineRange(blobUrl);
+        if (!lineRange) {
+          return false;
+        }
+        
+        // Only include this issue if the current line is the start of its range
+        return lineRange.start === lineNumber;
+      });
+      
+      // If no issues should show an icon on this line, skip it
+      if (issuesForIcon.length === 0) {
+        return;
+      }
+      
       // Check if icon already exists
       const existingIcon = lineElement.querySelector('.github-issues-line-icon');
       if (existingIcon) {
         return;
       }
       
-      // Create icon
+      // Create icon (but show all issues for this line in the tooltip, not just the filtered ones)
+      // This way if line 12 has both a 12-15 range issue and a single-line issue on 12, both show
       const icon = createLineIcon(lineNumber, lineIssues, dark);
       if (!icon) {
         return;
@@ -572,6 +719,9 @@
     
     // Reset last clicked comment reference when re-rendering
     lastClickedCommentBox = null;
+    
+    // Clear existing highlights when re-rendering
+    clearPermanentHighlights();
     
     // Detect theme
     const dark = isDarkMode();
@@ -871,10 +1021,16 @@
             return;
           }
           
-          // Extract line number and prefix body text
-          const lineNumber = blobUrl ? extractLineNumber(blobUrl) : null;
-          if (lineNumber !== null) {
-            bodyText = `${lineNumber}: ${bodyText}`;
+          // Extract line range and prefix body text
+          const lineRange = blobUrl ? extractLineRange(blobUrl) : null;
+          if (lineRange !== null) {
+            if (lineRange.start === lineRange.end) {
+              // Single line
+              bodyText = `${lineRange.start}: ${bodyText}`;
+            } else {
+              // Line range
+              bodyText = `${lineRange.start}-${lineRange.end}: ${bodyText}`;
+            }
           }
           
           // Create box/link element
@@ -981,16 +1137,17 @@
             e.preventDefault();
             e.stopPropagation();
             
-            // Extract line number and scroll/highlight
-            const targetLineNumber = extractLineNumber(blobUrl);
-            if (targetLineNumber) {
-              // Update URL hash to reflect the line number
-              window.history.replaceState(null, '', `#L${targetLineNumber}`);
+            // Extract line range and scroll/highlight
+            const lineRange = extractLineRange(blobUrl);
+            if (lineRange) {
+              // Update URL hash to reflect the line number (use start of range)
+              window.history.replaceState(null, '', `#L${lineRange.start}`);
               
               // Small delay to ensure DOM is ready
               setTimeout(() => {
-                scrollToLine(targetLineNumber);
-                highlightLine(targetLineNumber);
+                scrollToLine(lineRange.start);
+                // Brief flash highlight on the first line
+                highlightLine(lineRange.start);
               }, 50);
             }
           }
@@ -1030,18 +1187,23 @@
       sidebar.appendChild(issuesContainer);
     });
     
-    // Store issues for line icon injection
+    // Store issues for line icon injection and highlight lines
     if (issues && issues.length > 0) {
       currentIssues = issues;
-      // Inject line icons after rendering issues
+      const currentFilePath = getCurrentFilePath();
+      // Inject line icons and highlight lines after rendering issues
       // Use setTimeout to ensure DOM is ready
       setTimeout(() => {
         injectLineIcons(issues);
+        if (currentFilePath) {
+          highlightAllCommentedLines(issues, currentFilePath);
+        }
       }, 200);
     } else {
       currentIssues = null;
-      // Remove icons if no issues
+      // Remove icons and highlights if no issues
       removeLineIcons();
+      clearPermanentHighlights();
     }
   }
 
@@ -1459,12 +1621,18 @@
     setTimeout(injectSidebar, 100);
   });
 
-  // Function to inject line icons if we have issues
+  // Function to inject line icons and highlight lines if we have issues
   function tryInjectLineIcons() {
     if (currentIssues && currentIssues.length > 0) {
+      const currentFilePath = getCurrentFilePath();
       setTimeout(() => {
         injectLineIcons(currentIssues);
+        if (currentFilePath) {
+          highlightAllCommentedLines(currentIssues, currentFilePath);
+        }
       }, 200);
+    } else {
+      clearPermanentHighlights();
     }
   }
 
