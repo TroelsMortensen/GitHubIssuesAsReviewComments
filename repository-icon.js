@@ -9,6 +9,7 @@
 
   const REPO_ICON_ID = 'github-issues-repo-icon';
   const BADGE_ID = 'github-issues-repo-icon-badge';
+  const ICON_CONTAINER_ID = 'github-issues-repo-icon-container';
 
   // Check if we're on a repository main page (owner/repo only, no sub-paths)
   function isRepositoryMainPage() {
@@ -203,6 +204,9 @@
       const blobUrl = extractBlobUrl(firstIssue.body);
       
       if (blobUrl) {
+        // Store the issue URL so the sidebar highlights the correct comment
+        await chrome.storage.local.set({ 'lastClickedComment': firstIssue.html_url });
+        
         // Navigate to the blob URL
         window.location.href = blobUrl;
       } else {
@@ -217,7 +221,7 @@
   function updateBadge(count) {
     const badge = document.getElementById(BADGE_ID);
     const icon = document.getElementById(REPO_ICON_ID);
-    const iconContainer = icon?.parentElement; // Container wrapping icon and badge
+    const iconContainer = document.getElementById(ICON_CONTAINER_ID);
     
     if (badge) {
       badge.textContent = count.toString();
@@ -285,6 +289,7 @@
     // Create container for icon and badge (position relative for badge positioning)
     // Initially hidden until we know the count
     const iconContainer = document.createElement('div');
+    iconContainer.id = ICON_CONTAINER_ID;
     iconContainer.style.cssText = `
       position: relative;
       display: none;
