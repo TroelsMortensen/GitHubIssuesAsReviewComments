@@ -153,6 +153,7 @@
       line-height: 1;
       box-sizing: border-box;
       z-index: 1000;
+      pointer-events: none;
     `;
 
     iconContainer.appendChild(badge);
