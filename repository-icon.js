@@ -86,6 +86,44 @@
     }
   }
 
+  // Fetch open issues with code references and sort by issue number (lowest first)
+  async function fetchIssuesWithCodeRefs(owner, repo) {
+    try {
+      const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues?state=open&per_page=100`);
+      
+      if (!response.ok) {
+        console.error('Failed to fetch issues:', response.status, response.statusText);
+        return [];
+      }
+
+      const issues = await response.json();
+      
+      // Filter to open issues (exclude pull requests) with blob URLs in body
+      const filteredIssues = issues.filter(issue => {
+        // Exclude pull requests
+        if (issue.pull_request) {
+          return false;
+        }
+        
+        // Must be open
+        if (issue.state !== 'open') {
+          return false;
+        }
+        
+        // Must have a blob URL in the body
+        return extractBlobUrl(issue.body) !== null;
+      });
+
+      // Sort by issue number (lowest/oldest first)
+      filteredIssues.sort((a, b) => a.number - b.number);
+
+      return filteredIssues;
+    } catch (error) {
+      console.error('Error fetching issues with code refs:', error);
+      return [];
+    }
+  }
+
   // Create badge element
   function createBadge(iconContainer) {
     // Check if badge already exists
@@ -147,6 +185,31 @@
       }
     `;
     document.head.appendChild(style);
+  }
+
+  // Navigate to the first code link from open issues
+  async function navigateToFirstCodeLink(owner, repo) {
+    try {
+      const issues = await fetchIssuesWithCodeRefs(owner, repo);
+      
+      if (issues.length === 0) {
+        console.log('No open issues with code references found');
+        return;
+      }
+
+      // Get the first issue (already sorted by issue number, lowest first)
+      const firstIssue = issues[0];
+      const blobUrl = extractBlobUrl(firstIssue.body);
+      
+      if (blobUrl) {
+        // Navigate to the blob URL
+        window.location.href = blobUrl;
+      } else {
+        console.error('First issue does not have a valid blob URL');
+      }
+    } catch (error) {
+      console.error('Error navigating to first code link:', error);
+    }
   }
 
   // Update badge with count and wiggle icon if needed
@@ -239,6 +302,14 @@
       width: auto;
       cursor: pointer;
     `;
+
+    // Add click handler to navigate to first code link
+    icon.addEventListener('click', async (e) => {
+      const repoInfo = getRepoInfo();
+      if (repoInfo) {
+        await navigateToFirstCodeLink(repoInfo.owner, repoInfo.repo);
+      }
+    });
 
     // Append icon to container
     iconContainer.appendChild(icon);
