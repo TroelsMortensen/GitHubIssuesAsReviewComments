@@ -28,7 +28,11 @@
   "content_scripts": [
     {
       "matches": ["https://github.com/*"],
-      "js": ["content.js"],
+      "js": [
+        "extension-utils.js",
+        "repository-icon.js",
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ],
