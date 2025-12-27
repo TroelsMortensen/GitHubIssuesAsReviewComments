@@ -818,9 +818,9 @@
       const repoInfo = getRepoInfo();
       if (repoInfo) {
         clearCache(repoInfo.owner, repoInfo.repo);
-        // Re-fetch issues after clearing cache
+        // Re-fetch issues after clearing cache (bypass cache to force fresh fetch)
         renderIssues(sidebar, null); // Show loading state
-        fetchIssues(repoInfo.owner, repoInfo.repo)
+        fetchIssues(repoInfo.owner, repoInfo.repo, true)
           .then(issues => {
             currentIssues = issues;
             renderIssues(sidebar, issues);
@@ -1512,7 +1512,8 @@
       }
       
       // Cache miss or expired, fetch from API
-      const url = `https://api.github.com/repos/${owner}/${repo}/issues?state=all&per_page=100&sort=created&direction=desc`;
+      // Only fetch open issues - closed issues should not appear
+      const url = `https://api.github.com/repos/${owner}/${repo}/issues?state=open&per_page=100&sort=created&direction=desc`;
       const response = await fetch(url);
       
       if (!response.ok) {
@@ -1527,7 +1528,8 @@
       
       const issues = await response.json();
       // Filter out pull requests (issues have pull_request property when they're PRs)
-      const actualIssues = issues.filter(issue => !issue.pull_request);
+      // Also explicitly filter for open state as a safeguard (API should already return only open)
+      const actualIssues = issues.filter(issue => !issue.pull_request && issue.state === 'open');
       
       // Save to cache
       saveIssuesToCache(owner, repo, actualIssues);
