@@ -967,7 +967,7 @@
     
     // Create header title
     const header = document.createElement('h3');
-    header.textContent = 'Issues';
+    header.textContent = 'Comments';
     header.style.cssText = `
       font-size: 16px;
       font-weight: 600;
