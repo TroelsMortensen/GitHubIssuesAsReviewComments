@@ -16,10 +16,15 @@
     return window.location.pathname.includes('/blob/');
   }
 
+  // Check if we're on the "Create new issue" page
+  function isCreateIssuePage() {
+    return window.location.pathname.includes('/issues/new');
+  }
+
   // Extract repository owner and name from GitHub URL
   function getRepoInfo() {
     const pathParts = window.location.pathname.split('/').filter(part => part);
-    // URL pattern: /{owner}/{repo}/blob/...
+    // URL pattern: /{owner}/{repo}/blob/... or /{owner}/{repo}/issues/new
     if (pathParts.length >= 2) {
       return {
         owner: pathParts[0],
@@ -27,6 +32,206 @@
       };
     }
     return null;
+  }
+
+  // Store blob URL in sessionStorage when on blob page (for use when creating issue)
+  function storeBlobUrlForIssueCreation() {
+    if (isBlobPage()) {
+      const blobUrl = window.location.href;
+      sessionStorage.setItem('github-review-comments-blob-url', blobUrl);
+    }
+  }
+
+  // Get stored blob URL for issue creation
+  function getStoredBlobUrl() {
+    return sessionStorage.getItem('github-review-comments-blob-url');
+  }
+
+  // Clear stored blob URL
+  function clearStoredBlobUrl() {
+    sessionStorage.removeItem('github-review-comments-blob-url');
+  }
+
+  // Find title input field on issue creation page
+  function findTitleInput() {
+    // Try multiple selectors to find the title input
+    // React-generated IDs are not reliable, so use more stable selectors
+    
+    // Strategy 1: Look for input with placeholder containing "title"
+    const inputsWithPlaceholder = document.querySelectorAll('input[placeholder*="title" i], input[placeholder*="Title"]');
+    if (inputsWithPlaceholder.length > 0) {
+      return inputsWithPlaceholder[0];
+    }
+    
+    // Strategy 2: Try to find input near label "Add a title" or similar
+    const labels = document.querySelectorAll('label');
+    for (const label of labels) {
+      const labelText = label.textContent?.toLowerCase() || '';
+      if (labelText.includes('title') || labelText.includes('add a title')) {
+        // Look for input associated with this label
+        const forAttr = label.getAttribute('for');
+        if (forAttr) {
+          const input = document.querySelector(`input[id="${forAttr}"]`);
+          if (input) return input;
+        }
+        // Check for input inside or near the label
+        const input = label.querySelector('input') || 
+                     label.parentElement?.querySelector('input[type="text"]');
+        if (input) return input;
+      }
+    }
+    
+    // Strategy 3: Look for input with aria-label containing "title"
+    const ariaLabelInputs = document.querySelectorAll('input[aria-label*="title" i], input[aria-label*="Title"]');
+    if (ariaLabelInputs.length > 0) {
+      return ariaLabelInputs[0];
+    }
+    
+    // Strategy 4: Fallback: look for first text input in a form
+    const forms = document.querySelectorAll('form');
+    for (const form of forms) {
+      const textInputs = form.querySelectorAll('input[type="text"]');
+      if (textInputs.length > 0) {
+        // Check if it's near a title-related element
+        const input = textInputs[0];
+        const parent = input.closest('div, fieldset, section');
+        if (parent) {
+          const parentText = parent.textContent?.toLowerCase() || '';
+          if (parentText.includes('title')) {
+            return input;
+          }
+        }
+        // Return first text input as last resort
+        return input;
+      }
+    }
+    
+    return null;
+  }
+
+  // Find body textarea on issue creation page
+  function findBodyTextarea() {
+    // Try multiple selectors based on screenshot information
+    // Priority: aria-label > placeholder > class name
+    
+    // Strategy 1: Try aria-label="Markdown value" (from screenshot)
+    let textarea = document.querySelector('textarea[aria-label="Markdown value"]');
+    if (textarea) return textarea;
+    
+    // Strategy 2: Try placeholder="Type your description here..." (from screenshot)
+    textarea = document.querySelector('textarea[placeholder="Type your description here..."]');
+    if (textarea) return textarea;
+    
+    // Strategy 3: Try placeholder containing "description" (case insensitive)
+    textarea = document.querySelector('textarea[placeholder*="description" i], textarea[placeholder*="Description"]');
+    if (textarea) return textarea;
+    
+    // Strategy 4: Try aria-label containing "markdown" or "description"
+    textarea = document.querySelector('textarea[aria-label*="markdown" i], textarea[aria-label*="Markdown"], textarea[aria-label*="description" i], textarea[aria-label*="Description"]');
+    if (textarea) return textarea;
+    
+    // Strategy 5: Try class containing "TextArea" or "MarkdownEditor"
+    textarea = document.querySelector('textarea.TextArea, textarea[class*="TextArea"], textarea[class*="MarkdownEditor"], textarea[class*="markdown"]');
+    if (textarea) return textarea;
+    
+    // Strategy 6: Try to find textarea near label "Add a description" or similar
+    const labels = document.querySelectorAll('label');
+    for (const label of labels) {
+      const labelText = label.textContent?.toLowerCase() || '';
+      if (labelText.includes('description') || labelText.includes('add a description')) {
+        const forAttr = label.getAttribute('for');
+        if (forAttr) {
+          const textarea = document.querySelector(`textarea[id="${forAttr}"]`);
+          if (textarea) return textarea;
+        }
+        // Check for textarea inside or near the label
+        const textarea = label.querySelector('textarea') || 
+                        label.parentElement?.querySelector('textarea');
+        if (textarea) return textarea;
+      }
+    }
+    
+    // Strategy 7: Fallback: find any textarea in a form (should be the description)
+    const forms = document.querySelectorAll('form');
+    for (const form of forms) {
+      const textareas = form.querySelectorAll('textarea');
+      if (textareas.length > 0) {
+        // Prefer textarea with rows attribute (likely the description field)
+        for (const ta of textareas) {
+          if (ta.hasAttribute('rows') && parseInt(ta.getAttribute('rows')) >= 10) {
+            return ta;
+          }
+        }
+        // Return first textarea as fallback
+        return textareas[0];
+      }
+    }
+    
+    // Last resort: find any textarea on the page
+    textarea = document.querySelector('textarea');
+    if (textarea) return textarea;
+    
+    return null;
+  }
+
+  // Get blob URL from permalink query parameter or stored value
+  function getBlobUrlForIssueCreation() {
+    // First, try to get from permalink query parameter (when navigating via GitHub's permalink link)
+    const urlParams = new URLSearchParams(window.location.search);
+    const permalink = urlParams.get('permalink');
+    if (permalink) {
+      // Decode the permalink (it's URL encoded)
+      try {
+        return decodeURIComponent(permalink);
+      } catch (e) {
+        // If decoding fails, use as-is
+        return permalink;
+      }
+    }
+    
+    // Fall back to stored blob URL from sessionStorage
+    return getStoredBlobUrl();
+  }
+
+  // Auto-fill issue creation form
+  function autoFillIssueForm() {
+    // Get blob URL from permalink parameter or stored value
+    const blobUrl = getBlobUrlForIssueCreation();
+    if (!blobUrl) {
+      return; // No blob URL available, don't auto-fill
+    }
+
+    // Find form elements
+    const titleInput = findTitleInput();
+    const bodyTextarea = findBodyTextarea();
+
+    if (titleInput) {
+      // Set title to "Comment"
+      titleInput.value = 'Comment';
+      // Trigger input event to notify React of the change
+      titleInput.dispatchEvent(new Event('input', { bubbles: true }));
+      titleInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    if (bodyTextarea) {
+      // Insert blob URL + two line breaks
+      const textToInsert = `${blobUrl}\n\n`;
+      bodyTextarea.value = textToInsert;
+      
+      // Trigger input event to notify React of the change
+      bodyTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+      bodyTextarea.dispatchEvent(new Event('change', { bubbles: true }));
+      
+      // Position cursor after the two line breaks
+      const cursorPosition = textToInsert.length;
+      bodyTextarea.setSelectionRange(cursorPosition, cursorPosition);
+      
+      // Focus the textarea
+      bodyTextarea.focus();
+      
+      // Clear stored blob URL after successful auto-fill
+      clearStoredBlobUrl();
+    }
   }
 
   // Find the target container (the div with class Box-sc-62in7e-0 hGzGyY)
@@ -1721,6 +1926,38 @@
       cleanupExtension();
       return;
     }
+
+    // Store blob URL when on blob page (for issue creation)
+    if (isBlobPage()) {
+      storeBlobUrlForIssueCreation();
+    }
+
+    // Handle issue creation page auto-fill
+    if (isCreateIssuePage()) {
+      // Set up retry logic to wait for form elements to load
+      let retries = 0;
+      const maxRetries = 20; // Increase retries to 20 (4 seconds total)
+      const retryInterval = setInterval(() => {
+        retries++;
+        const titleInput = findTitleInput();
+        const bodyTextarea = findBodyTextarea();
+        
+        if (titleInput && bodyTextarea) {
+          clearInterval(retryInterval);
+          // Small delay to ensure elements are fully ready
+          setTimeout(() => {
+            autoFillIssueForm();
+          }, 50);
+        } else if (retries >= maxRetries) {
+          clearInterval(retryInterval);
+          // Elements not found, log for debugging
+          console.log('GitHub Review Comments: Could not find form elements after retries');
+        }
+      }, 200);
+      
+      // Don't proceed with sidebar injection on issue creation page
+      return;
+    }
     
     await injectSidebar();
     // Try to add reopen button (toolbar might load later, so we'll retry)
@@ -1746,6 +1983,18 @@
   // GitHub uses Turbo for navigation, so we listen for turbo:load events
   document.addEventListener('turbo:load', initializeExtension);
   document.addEventListener('pjax:end', initializeExtension);
+
+  // Also store blob URL on navigation events
+  document.addEventListener('turbo:load', () => {
+    if (isBlobPage()) {
+      storeBlobUrlForIssueCreation();
+    }
+  });
+  document.addEventListener('pjax:end', () => {
+    if (isBlobPage()) {
+      storeBlobUrlForIssueCreation();
+    }
+  });
   
   // Fallback: Observe URL changes using MutationObserver on the body
   let lastUrl = location.href;
