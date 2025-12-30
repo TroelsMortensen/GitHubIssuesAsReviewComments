@@ -480,7 +480,8 @@
       return;
     }
     
-    const allLinesToHighlight = new Set();
+    // Filter and collect issues with their line ranges
+    const issuesWithRanges = [];
     
     issues.forEach(issue => {
       // Only include open issues
@@ -505,14 +506,22 @@
         return;
       }
       
-      // Add all lines in range to the set
-      lineRange.allLines.forEach(lineNumber => {
-        allLinesToHighlight.add(lineNumber);
+      issuesWithRanges.push({
+        issue: issue,
+        lineRange: lineRange
       });
     });
     
-    // Highlight all lines
-    highlightLinesPermanently(Array.from(allLinesToHighlight));
+    // Sort issues by starting line number
+    issuesWithRanges.sort((a, b) => {
+      return a.lineRange.start - b.lineRange.start;
+    });
+    
+    // Highlight lines with alternating colors based on issue index
+    issuesWithRanges.forEach((item, index) => {
+      const colorVariant = index % 2 === 0 ? 'green' : 'blue';
+      highlightLinesPermanently(item.lineRange.allLines, colorVariant);
+    });
   }
 
   // Find code line elements in GitHub code viewer
@@ -600,11 +609,17 @@
       style.id = 'github-issues-highlight-style';
       const isDark = isDarkMode();
       style.textContent = `
-        .github-issues-line-highlight {
+        .github-issues-line-highlight-green {
           background-color: rgba(46, 160, 67, 0.2) !important;
         }
-        .github-issues-line-highlight td {
+        .github-issues-line-highlight-green td {
           background-color: rgba(46, 160, 67, 0.2) !important;
+        }
+        .github-issues-line-highlight-blue {
+          background-color: rgba(9, 105, 218, 0.2) !important;
+        }
+        .github-issues-line-highlight-blue td {
+          background-color: rgba(9, 105, 218, 0.2) !important;
         }
         .github-issues-line-highlight-temp {
           background-color: rgba(255, 223, 93, 0.3) !important;
@@ -631,14 +646,10 @@
     }, 1000);
   }
 
-  // Permanently highlight a single line (green)
-  function highlightLinePermanently(lineNumber) {
+  // Permanently highlight a single line with specified color variant
+  function highlightLinePermanently(lineNumber, colorVariant = 'green') {
     if (!lineNumber) {
       return;
-    }
-    
-    if (permanentlyHighlightedLines.has(lineNumber)) {
-      return; // Already highlighted
     }
     
     // Find the line element
@@ -647,19 +658,27 @@
       return;
     }
     
-    // Add permanent highlight class
-    lineElement.classList.add('github-issues-line-highlight');
-    permanentlyHighlightedLines.add(lineNumber);
+    // Remove any existing highlight classes
+    lineElement.classList.remove('github-issues-line-highlight-green', 'github-issues-line-highlight-blue', 'github-issues-line-highlight');
+    
+    // Add the appropriate highlight class based on color variant
+    const colorClass = colorVariant === 'blue' ? 'github-issues-line-highlight-blue' : 'github-issues-line-highlight-green';
+    lineElement.classList.add(colorClass);
+    
+    // Track this line as highlighted (store with color info)
+    if (!permanentlyHighlightedLines.has(lineNumber)) {
+      permanentlyHighlightedLines.add(lineNumber);
+    }
   }
 
-  // Permanently highlight multiple lines (green)
-  function highlightLinesPermanently(lineNumbers) {
+  // Permanently highlight multiple lines with specified color variant
+  function highlightLinesPermanently(lineNumbers, colorVariant = 'green') {
     if (!lineNumbers || lineNumbers.length === 0) {
       return;
     }
     
     lineNumbers.forEach(lineNumber => {
-      highlightLinePermanently(lineNumber);
+      highlightLinePermanently(lineNumber, colorVariant);
     });
   }
 
@@ -668,7 +687,7 @@
     permanentlyHighlightedLines.forEach(lineNumber => {
       const lineElement = document.querySelector(`[data-line-number="${lineNumber}"]`);
       if (lineElement) {
-        lineElement.classList.remove('github-issues-line-highlight');
+        lineElement.classList.remove('github-issues-line-highlight', 'github-issues-line-highlight-green', 'github-issues-line-highlight-blue');
       }
     });
     permanentlyHighlightedLines.clear();
