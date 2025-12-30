@@ -610,16 +610,16 @@
       const isDark = isDarkMode();
       style.textContent = `
         .github-issues-line-highlight-green {
-          background-color: rgba(46, 160, 67, 0.2) !important;
+          background-color: rgba(46, 160, 67, 0.25) !important;
         }
         .github-issues-line-highlight-green td {
-          background-color: rgba(46, 160, 67, 0.2) !important;
+          background-color: rgba(46, 160, 67, 0.25) !important;
         }
         .github-issues-line-highlight-blue {
-          background-color: rgba(9, 105, 218, 0.2) !important;
+          background-color: rgba(46, 160, 67, 0.15) !important;
         }
         .github-issues-line-highlight-blue td {
-          background-color: rgba(9, 105, 218, 0.2) !important;
+          background-color: rgba(46, 160, 67, 0.15) !important;
         }
         .github-issues-line-highlight-temp {
           background-color: rgba(255, 223, 93, 0.3) !important;
@@ -1937,9 +1937,9 @@
       position: relative;
     `;
     
-    // Create icon using icon48.png
+    // Create icon using CommentIcon.png
     const icon = document.createElement('img');
-    icon.src = chrome.runtime.getURL('icons/icon48.png');
+    icon.src = chrome.runtime.getURL('icons/CommentIcon.png');
     icon.alt = 'Issues';
     icon.style.cssText = `
       width: 16px;

@@ -1,6 +1,5 @@
 # Potential Features for GitHub Review Comments Extension
 
-alternate line highlight colors, so it's clearer to see where one comment ends and the next begins
 
 skift også toggle ikonent
 

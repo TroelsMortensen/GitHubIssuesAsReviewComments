@@ -16,15 +16,18 @@ This extension displays GitHub issues as review comments directly alongside your
 - **⚡ Quick Navigation**: Click any comment to jump directly to the referenced code line with smooth scrolling
 - **💡 Hover Tooltips**: Hover over line icons to see issue comments without leaving your current position
 - **🔗 Open Issues**: Click the icon in the top-right corner of each comment to open the GitHub issue in a new window (great for closing issues without losing your place)
+- **✨ Quick Issue Creation**: Click any line number to see an icon - click the icon to quickly create a new issue referencing that line (supports single lines and multi-line ranges with shift-click)
+- **🎨 Alternating Highlights**: Lines with comments are highlighted in alternating shades of green, making it easy to distinguish between adjacent comments from different issues
 - **🎨 Theme Support**: Automatically adapts to GitHub's light and dark themes
 - **💾 Smart Caching**: Issues are cached for 5 minutes to reduce API calls when navigating between files
 
 ### For Teachers
 
+- **⚡ Quick Issue Creation**: Click any line number in a code file - a small icon appears. Click the icon to instantly create a new issue with the line reference pre-filled. For multi-line ranges, shift-click another line number to select a range, then click the icon
 - **📋 Create Issues as Usual**: Simply create GitHub issues normally - no special format required
 - **🔗 Include Code References**: Add blob URLs with line numbers in your issue body (e.g., `https://github.com/user/repo/blob/main/file.java#L42`)
 - **✅ Support for Ranges**: Reference single lines (`#L42`) or line ranges (`#L42-L45`)
-- **👁️ Visual Feedback**: Students can easily see all your feedback organized by file and line number
+- **👁️ Visual Feedback**: Students can easily see all your feedback organized by file and line number, with alternating highlight colors to distinguish between different issues
 
 ## Installation
 
@@ -48,6 +51,15 @@ This extension displays GitHub issues as review comments directly alongside your
 
 ### Teacher Workflow: Providing Feedback
 
+**Method 1: Quick Creation (Recommended)**
+1. **Navigate to the code** you want to review on GitHub (any blob page)
+2. **Click on a line number** - a small icon will appear
+3. **For single lines**: Click the icon to open a new issue page with the line reference pre-filled
+4. **For line ranges**: Shift-click another line number to select a range, then click the icon to create an issue with the full range
+5. **Write your feedback** in the issue body (the line reference is already included)
+6. **Create the issue** - students will see it automatically appear as a comment in the sidebar
+
+**Method 2: Manual Creation**
 1. **Navigate to the code** you want to review on GitHub (any blob page)
 2. **Create a new issue** in the repository as you normally would
 3. **Include a code reference** in the issue body:
@@ -79,17 +91,23 @@ Consider using a more descriptive variable name here. "x" doesn't clearly indica
 5. **View line icons**:
    - Look for comment icons (💬) next to line numbers that have associated issues
    - **Hover over the icon** to see a tooltip with all issue comments for that line
-6. **Work with issues**:
+   - Lines with comments are highlighted in alternating shades of green to distinguish between different issues
+6. **Create new issues**:
+   - **Click any line number** - a small icon will appear after 3 seconds
+   - Click the icon to create a new issue referencing that line
+   - **For multi-line ranges**: Click a line number, then shift-click another line number to select a range. The icon moves to the end line - click it to create an issue with the full range reference
+7. **Work with issues**:
    - Hover over any comment box to see the full text (it expands vertically)
    - Click the **↗ icon** in the top-right corner of a comment to open the issue in a new window
    - In the new window, you can close the issue or add replies without losing your place in the code
-7. **Navigate between files**: When you click a comment linking to a different file, the extension maintains your context and highlights the relevant line
+8. **Navigate between files**: When you click a comment linking to a different file, the extension maintains your context and highlights the relevant line
 
 ### Sidebar Controls
 
-- **Toggle Button**: Click the icon in the GitHub toolbar (top right) to show/hide the sidebar
+- **Toggle Button**: Click the comment icon in the GitHub toolbar (top right) to show/hide the sidebar
 - **Close Button**: Click the × button in the sidebar header to close it
-- **Clear Cache**: Click the 🗑️ button next to the close button to refresh the issues list (useful if you just created a new issue)
+- **Refresh Button**: Click the ↻ button to refresh the issues list (bypasses cache to show recently closed issues)
+- **Clear Cache**: Click the 🗑️ button next to the close button to clear cached issue data
 
 ## Technical Details
 
@@ -100,19 +118,24 @@ Consider using a more descriptive variable name here. "x" doesn't clearly indica
 3. **Smart Filtering**: Only open issues are displayed (closed issues are automatically filtered out)
 4. **File Grouping**: Issues are grouped by file path, with the currently viewed file's issues at the top
 5. **Line Mapping**: Icons are injected next to code lines that have associated open issues
-6. **Caching**: Issues are cached for 5 minutes to improve performance when navigating between files
+6. **Color Alternation**: Lines are highlighted with alternating shades of green, with each issue getting a different shade to distinguish adjacent comments
+7. **Caching**: Issues are cached for 5 minutes to improve performance when navigating between files
+8. **Quick Issue Creation**: Clicking line numbers shows an icon that opens a pre-filled issue creation page with the line reference
 
 ### File Structure
 
 ```
 ├── manifest.json       # Extension configuration (Manifest V3)
-├── background.js      # Background service worker
+├── background.js      # Background service worker (handles extension toggle)
+├── extension-utils.js # Shared utility functions
+├── repository-icon.js # Repository icon functionality
 ├── content.js         # Content script (injected into GitHub pages)
 └── icons/             # Extension icons
     ├── icon16.png     # Toolbar icon (16x16)
     ├── icon48.png     # Extension management icon (48x48)
     ├── icon128.png    # Store icon (128x128)
-    └── CommentIcon.png # Line comment icon
+    ├── CommentIcon.png # Toolbar toggle button icon
+    └── CommentIcon48.png # Repository page icon (48x48)
 ```
 
 ### Permissions
