@@ -5,7 +5,7 @@
   const SIDEBAR_ID = 'github-issues-sidebar';
   const REOPEN_BUTTON_ID = 'github-issues-reopen-button';
   const CREATE_ISSUE_ICON_ID = 'github-issues-create-issue-icon';
-  const CREATE_ISSUE_ICON_TIMEOUT = 5000; // 5 seconds
+  const CREATE_ISSUE_ICON_TIMEOUT = 3000; // 3 seconds
   
   // Store current issues for line icon injection
   let currentIssues = null;
@@ -930,8 +930,8 @@
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      width: 16px;
-      height: 16px;
+      width: 21px;
+      height: 21px;
       cursor: pointer;
       z-index: 10000 !important;
       opacity: 0.9;
@@ -953,10 +953,19 @@
       icon.style.opacity = '0.8';
     });
     
-    // Click handler
-    icon.addEventListener('click', (e) => {
+    // Prevent GitHub's click handlers from firing when clicking the icon
+    icon.addEventListener('mousedown', (e) => {
+      e.preventDefault();
       e.stopPropagation();
-      openNewIssueForLine(lineNumber);
+      e.stopImmediatePropagation();
+    });
+    
+    // Click handler - use current hash to support ranges
+    icon.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      openNewIssueForLine();
     });
     
     // Append to container
@@ -970,27 +979,45 @@
     }, CREATE_ISSUE_ICON_TIMEOUT);
   }
 
-  // Open new issue page for a specific line
-  function openNewIssueForLine(lineNumber) {
+  // Open new issue page for current line(s) - supports both single line and ranges
+  function openNewIssueForLine() {
     const repoInfo = getRepoInfo();
     if (!repoInfo) {
       return;
     }
     
-    // Get current blob URL
-    const currentUrl = new URL(window.location.href);
-    // Ensure the URL hash includes the line number
-    currentUrl.hash = `#L${lineNumber}`;
-    const blobUrl = currentUrl.toString();
-    
-    // Construct new issue URL with permalink parameter
-    const issueUrl = `https://github.com/${repoInfo.owner}/${repoInfo.repo}/issues/new?permalink=${encodeURIComponent(blobUrl)}`;
-    
-    // Open in new window
-    window.open(issueUrl, '_blank', 'width=800,height=600');
-    
-    // Remove icon after opening
-    removeCreateIssueIcon();
+    // Get current blob URL - use a small delay to ensure hash is up-to-date after hashchange events
+    setTimeout(() => {
+      const currentUrl = new URL(window.location.href);
+      
+      // Always check the current hash first (supports both #L12 and #L12-L15)
+      const hash = window.location.hash;
+      let hashToUse = hash;
+      
+      // If hash contains a line reference, use it (supports both #L12 and #L12-L15)
+      if (hash && hash.match(/#L\d+(?:-L\d+)?/)) {
+        hashToUse = hash;
+      } else if (currentIconLineNumber) {
+        // Fallback to stored line number if no hash
+        hashToUse = `#L${currentIconLineNumber}`;
+      } else {
+        // No hash and no stored line number, can't create issue
+        return;
+      }
+      
+      // Set the hash on the URL
+      currentUrl.hash = hashToUse;
+      const blobUrl = currentUrl.toString();
+      
+      // Construct new issue URL with permalink parameter
+      const issueUrl = `https://github.com/${repoInfo.owner}/${repoInfo.repo}/issues/new?permalink=${encodeURIComponent(blobUrl)}`;
+      
+      // Open in new window
+      window.open(issueUrl, '_blank', 'width=800,height=600');
+      
+      // Remove icon after opening
+      removeCreateIssueIcon();
+    }, 50); // Small delay to ensure hashchange events have processed
   }
 
   // Handle line number clicks to show create issue icon
@@ -1040,36 +1067,40 @@
       let lineNumberElement = null;
       let lineNumber = null;
       
-      // Strategy 1: Check if target itself is a line number element (React structure)
-      if (target.getAttribute('data-line-number')) {
+      // Strategy 1: Find the closest element with data-line-number (catches clicks anywhere in the line container)
+      // This is the most reliable method as it works even if clicking between numbers or in whitespace
+      const closestLineElement = target.closest('[data-line-number]');
+      if (closestLineElement) {
+        const lineNumAttr = closestLineElement.getAttribute('data-line-number');
+        if (lineNumAttr) {
+          lineNumber = parseInt(lineNumAttr, 10);
+          lineNumberElement = closestLineElement;
+        }
+      }
+      
+      // Strategy 2: Check if target itself is a line number element (React structure)
+      if (!lineNumberElement && target.getAttribute('data-line-number')) {
         lineNumberElement = target;
         lineNumber = parseInt(target.getAttribute('data-line-number'), 10);
       }
       
-      // Strategy 2: Check if target has react-line-number class
+      // Strategy 3: Check if target has react-line-number class or is inside one
       if (!lineNumberElement && (target.classList.contains('react-line-number') || 
                                   target.className.includes('react-line-number'))) {
         lineNumberElement = target;
-        // Try to get line number from data attribute or parent
+        // Try to get line number from data attribute
         const lineNumAttr = target.getAttribute('data-line-number');
         if (lineNumAttr) {
           lineNumber = parseInt(lineNumAttr, 10);
-        } else {
-          // Check parent for data-line-number
-          const parent = target.closest('[data-line-number]');
-          if (parent) {
-            lineNumber = parseInt(parent.getAttribute('data-line-number'), 10);
-            lineNumberElement = parent;
-          }
         }
       }
       
-      // Strategy 3: Find closest element with data-line-number
+      // Strategy 4: Look for parent with react-line-number class
       if (!lineNumberElement) {
-        const closestLineElement = target.closest('[data-line-number]');
-        if (closestLineElement) {
-          lineNumber = parseInt(closestLineElement.getAttribute('data-line-number'), 10);
-          lineNumberElement = closestLineElement;
+        const reactLineParent = target.closest('.react-line-number, [class*="react-line-number"]');
+        if (reactLineParent && reactLineParent.getAttribute('data-line-number')) {
+          lineNumber = parseInt(reactLineParent.getAttribute('data-line-number'), 10);
+          lineNumberElement = reactLineParent;
         }
       }
       
@@ -1112,14 +1143,22 @@
         }
       }
       
-      if (!lineNumberElement || isNaN(lineNumber)) {
-        return;
+      // If we found a line element, wait a tiny bit to ensure DOM is stable, then show icon
+      if (lineNumberElement && !isNaN(lineNumber)) {
+        // Use requestAnimationFrame to ensure we're in sync with browser rendering
+        requestAnimationFrame(() => {
+          // Double-check the element still exists (in case DOM changed)
+          if (document.contains(lineNumberElement)) {
+            // Show icon for this line with a small delay to avoid conflicts with GitHub's menu
+            setTimeout(() => {
+              // Triple-check element still exists before showing icon
+              if (document.contains(lineNumberElement)) {
+                createAndPositionIssueIcon(lineNumber, lineNumberElement);
+              }
+            }, 50);
+          }
+        });
       }
-      
-      // Show icon for this line with a small delay to avoid conflicts with GitHub's menu
-      setTimeout(() => {
-        createAndPositionIssueIcon(lineNumber, lineNumberElement);
-      }, 150);
     };
     
     // Create click handler as backup (in case mousedown doesn't work)
@@ -2321,10 +2360,43 @@
       // Use setTimeout to ensure DOM is fully loaded
       setTimeout(() => {
         handleLineNumberClicks();
+        
+        // Also use MutationObserver to re-attach handlers when code content changes
+        // This handles cases where GitHub dynamically loads code sections
+        if (typeof MutationObserver !== 'undefined') {
+          // Only create one observer
+          if (!window.githubReviewCommentsCodeObserver) {
+            window.githubReviewCommentsCodeObserver = new MutationObserver(() => {
+              // Re-attach handlers if they're not attached (handles dynamic content)
+              if (isBlobPage()) {
+                // Small delay to avoid excessive re-attachment
+                setTimeout(() => {
+                  if (!lineNumberClickHandler && !lineNumberMousedownHandler) {
+                    handleLineNumberClicks();
+                  }
+                }, 100);
+              }
+            });
+            
+            // Observe the main content area for changes
+            const codeContainer = document.querySelector('main, [role="main"], table[data-tagsearch-path], [class*="react-file"]');
+            if (codeContainer) {
+              window.githubReviewCommentsCodeObserver.observe(codeContainer, {
+                childList: true,
+                subtree: true
+              });
+            }
+          }
+        }
       }, 300);
     } else {
       // Remove icon if not on blob page
       removeCreateIssueIcon();
+      // Disconnect observer if it exists
+      if (window.githubReviewCommentsCodeObserver) {
+        window.githubReviewCommentsCodeObserver.disconnect();
+        window.githubReviewCommentsCodeObserver = null;
+      }
     }
   }
 
@@ -2442,6 +2514,23 @@
           scrollToLine(lineNumber);
           highlightLine(lineNumber);
         }, 100);
+      }
+      
+      // Handle icon movement when hash changes (for range selection)
+      if (createIssueIcon && createIssueIcon.parentNode) {
+        // Parse hash for line range
+        const lineRange = extractLineRange(window.location.href);
+        if (lineRange) {
+          // Use end line for range, start line for single line
+          const targetLine = lineRange.end || lineRange.start;
+          
+          // Find the line element for this line number
+          const lineElement = document.querySelector(`[data-line-number="${targetLine}"]`);
+          if (lineElement) {
+            // Move icon to the new line
+            createAndPositionIssueIcon(targetLine, lineElement);
+          }
+        }
       }
     }
   });
