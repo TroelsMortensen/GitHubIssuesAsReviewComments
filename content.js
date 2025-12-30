@@ -4,12 +4,19 @@
 
   const SIDEBAR_ID = 'github-issues-sidebar';
   const REOPEN_BUTTON_ID = 'github-issues-reopen-button';
+  const CREATE_ISSUE_ICON_ID = 'github-issues-create-issue-icon';
+  const CREATE_ISSUE_ICON_TIMEOUT = 5000; // 5 seconds
   
   // Store current issues for line icon injection
   let currentIssues = null;
   
   // Extension enabled state (default to true)
   let extensionEnabled = true;
+  
+  // Store reference to create issue icon and timeout
+  let createIssueIcon = null;
+  let createIssueIconTimeout = null;
+  let currentIconLineNumber = null;
   
   // Check if we're on a blob page
   function isBlobPage() {
@@ -791,6 +798,338 @@
 
 
   // Inject icons into code lines
+  // Remove create issue icon
+  function removeCreateIssueIcon() {
+    if (createIssueIcon && createIssueIcon.parentNode) {
+      createIssueIcon.parentNode.removeChild(createIssueIcon);
+    }
+    createIssueIcon = null;
+    currentIconLineNumber = null;
+    if (createIssueIconTimeout) {
+      clearTimeout(createIssueIconTimeout);
+      createIssueIconTimeout = null;
+    }
+    
+    // Remove click handlers if exist
+    if (lineNumberClickHandler) {
+      document.removeEventListener('click', lineNumberClickHandler, true);
+      lineNumberClickHandler = null;
+    }
+    if (lineNumberMousedownHandler) {
+      document.removeEventListener('mousedown', lineNumberMousedownHandler, true);
+      lineNumberMousedownHandler = null;
+    }
+  }
+
+  // Create and position the create issue icon
+  function createAndPositionIssueIcon(lineNumber, lineElement) {
+    // Remove existing icon first
+    removeCreateIssueIcon();
+    
+    if (!lineElement || !lineNumber) {
+      return;
+    }
+    
+    // Find the line number element to position icon on
+    let iconContainer = null;
+    
+    // Strategy 1: React-based structure - lineElement might be the div with react-line-number
+    if (lineElement.classList && (lineElement.classList.contains('react-line-number') || 
+                                   lineElement.className.includes('react-line-number'))) {
+      iconContainer = lineElement;
+    }
+    
+    // Strategy 2: If lineElement has data-line-number, use it directly (React structure)
+    if (!iconContainer && lineElement.getAttribute('data-line-number')) {
+      // Check if it's the line number div or if we need to find the line number div
+      if (lineElement.classList && lineElement.classList.contains('react-line-number')) {
+        iconContainer = lineElement;
+      } else {
+        // Find the react-line-number div within this element
+        iconContainer = lineElement.querySelector('.react-line-number, [class*="react-line-number"]');
+        if (!iconContainer) {
+          // Use the element itself if it has data-line-number
+          iconContainer = lineElement;
+        }
+      }
+    }
+    
+    // Strategy 3: Traditional table-based structure
+    if (!iconContainer) {
+      const selectors = [
+        'td.blob-num',
+        'td[class*="blob-num"]',
+        '.blob-num',
+        '[class*="blob-num"]',
+        'td:first-child'
+      ];
+      
+      for (const selector of selectors) {
+        iconContainer = lineElement.querySelector(selector);
+        if (iconContainer) break;
+      }
+      
+      // If lineElement is a TR, get first TD
+      if (!iconContainer && lineElement.tagName === 'TR') {
+        iconContainer = lineElement.querySelector('td:first-child');
+      }
+      
+      // Check if lineElement itself is the cell
+      if (!iconContainer && lineElement.tagName === 'TD') {
+        if (lineElement.classList.contains('blob-num') || 
+            lineElement.className.includes('blob-num')) {
+          iconContainer = lineElement;
+        }
+      }
+    }
+    
+    // Fallback: use the lineElement itself if nothing else found
+    if (!iconContainer) {
+      iconContainer = lineElement;
+    }
+    
+    if (!iconContainer) {
+      return;
+    }
+    
+    // Make sure container has relative positioning
+    const computedPosition = window.getComputedStyle(iconContainer).position;
+    if (computedPosition === 'static') {
+      iconContainer.style.position = 'relative';
+    }
+    
+    // Ensure container allows overflow (important for absolutely positioned children)
+    const computedOverflow = window.getComputedStyle(iconContainer).overflow;
+    if (computedOverflow === 'hidden') {
+      iconContainer.style.overflow = 'visible';
+    }
+    
+    const dark = isDarkMode();
+    
+    // Create icon element
+    const icon = document.createElement('img');
+    icon.id = CREATE_ISSUE_ICON_ID;
+    icon.src = chrome.runtime.getURL('icons/icon48.png');
+    icon.alt = 'Create issue for this line';
+    icon.title = 'Create issue for this line';
+    
+    // Set up error handler in case image fails to load
+    icon.onerror = () => {
+      // Fallback: create a text-based icon
+      icon.style.display = 'none';
+      const textIcon = document.createElement('div');
+      textIcon.textContent = '+';
+      textIcon.style.cssText = icon.style.cssText.replace('width: 16px; height: 16px;', 'width: 18px; height: 18px; line-height: 18px; text-align: center; font-size: 14px; font-weight: bold;');
+      textIcon.id = CREATE_ISSUE_ICON_ID + '-text';
+      iconContainer.appendChild(textIcon);
+      createIssueIcon = textIcon;
+    };
+    
+    icon.style.cssText = `
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+      z-index: 10000 !important;
+      opacity: 0.9;
+      transition: opacity 0.2s;
+      pointer-events: auto;
+      background-color: ${dark ? 'rgba(13, 17, 23, 0.9)' : 'rgba(255, 255, 255, 0.95)'};
+      border-radius: 3px;
+      padding: 2px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+      display: block !important;
+      visibility: visible !important;
+    `;
+    
+    // Hover effect
+    icon.addEventListener('mouseenter', () => {
+      icon.style.opacity = '1';
+    });
+    icon.addEventListener('mouseleave', () => {
+      icon.style.opacity = '0.8';
+    });
+    
+    // Click handler
+    icon.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openNewIssueForLine(lineNumber);
+    });
+    
+    // Append to container
+    iconContainer.appendChild(icon);
+    createIssueIcon = icon;
+    currentIconLineNumber = lineNumber;
+    
+    // Set timeout to hide icon
+    createIssueIconTimeout = setTimeout(() => {
+      removeCreateIssueIcon();
+    }, CREATE_ISSUE_ICON_TIMEOUT);
+  }
+
+  // Open new issue page for a specific line
+  function openNewIssueForLine(lineNumber) {
+    const repoInfo = getRepoInfo();
+    if (!repoInfo) {
+      return;
+    }
+    
+    // Get current blob URL
+    const currentUrl = new URL(window.location.href);
+    // Ensure the URL hash includes the line number
+    currentUrl.hash = `#L${lineNumber}`;
+    const blobUrl = currentUrl.toString();
+    
+    // Construct new issue URL with permalink parameter
+    const issueUrl = `https://github.com/${repoInfo.owner}/${repoInfo.repo}/issues/new?permalink=${encodeURIComponent(blobUrl)}`;
+    
+    // Open in new window
+    window.open(issueUrl, '_blank', 'width=800,height=600');
+    
+    // Remove icon after opening
+    removeCreateIssueIcon();
+  }
+
+  // Handle line number clicks to show create issue icon
+  // Use event delegation to catch clicks on dynamically added elements
+  let lineNumberClickHandler = null;
+  let lineNumberMousedownHandler = null;
+  
+  function handleLineNumberClicks() {
+    if (!isBlobPage()) {
+      // Remove handlers if exist
+      if (lineNumberClickHandler) {
+        document.removeEventListener('click', lineNumberClickHandler, true);
+        lineNumberClickHandler = null;
+      }
+      if (lineNumberMousedownHandler) {
+        document.removeEventListener('mousedown', lineNumberMousedownHandler, true);
+        lineNumberMousedownHandler = null;
+      }
+      return;
+    }
+    
+    // Remove existing handlers if any
+    if (lineNumberClickHandler) {
+      document.removeEventListener('click', lineNumberClickHandler, true);
+    }
+    if (lineNumberMousedownHandler) {
+      document.removeEventListener('mousedown', lineNumberMousedownHandler, true);
+    }
+    
+    // Create mousedown handler (fires earlier than click, might catch it before GitHub)
+    lineNumberMousedownHandler = (e) => {
+      const target = e.target;
+      
+      const isInCodeArea = target.closest('table[data-tagsearch-path], .react-file-line, tr[data-line-number], [class*="blob"], [class*="react-line"], [data-line-number], main, article, [class*="react-code"], [class*="react-file"]');
+      
+      if (!isInCodeArea) {
+        // Not in code area, ignore
+        return;
+      }
+      
+      // Don't show icon if clicking on the icon itself
+      if (target.id === CREATE_ISSUE_ICON_ID || target.closest(`#${CREATE_ISSUE_ICON_ID}`)) {
+        return;
+      }
+      
+      // Check for React-based line number structure (div with react-line-number class or data-line-number)
+      let lineNumberElement = null;
+      let lineNumber = null;
+      
+      // Strategy 1: Check if target itself is a line number element (React structure)
+      if (target.getAttribute('data-line-number')) {
+        lineNumberElement = target;
+        lineNumber = parseInt(target.getAttribute('data-line-number'), 10);
+      }
+      
+      // Strategy 2: Check if target has react-line-number class
+      if (!lineNumberElement && (target.classList.contains('react-line-number') || 
+                                  target.className.includes('react-line-number'))) {
+        lineNumberElement = target;
+        // Try to get line number from data attribute or parent
+        const lineNumAttr = target.getAttribute('data-line-number');
+        if (lineNumAttr) {
+          lineNumber = parseInt(lineNumAttr, 10);
+        } else {
+          // Check parent for data-line-number
+          const parent = target.closest('[data-line-number]');
+          if (parent) {
+            lineNumber = parseInt(parent.getAttribute('data-line-number'), 10);
+            lineNumberElement = parent;
+          }
+        }
+      }
+      
+      // Strategy 3: Find closest element with data-line-number
+      if (!lineNumberElement) {
+        const closestLineElement = target.closest('[data-line-number]');
+        if (closestLineElement) {
+          lineNumber = parseInt(closestLineElement.getAttribute('data-line-number'), 10);
+          lineNumberElement = closestLineElement;
+        }
+      }
+      
+      // Strategy 4: Traditional table-based structure (legacy GitHub)
+      if (!lineNumberElement) {
+        let cell = null;
+        // Check if target itself is a TD line number cell
+        if (target.tagName === 'TD') {
+          if (target.classList.contains('blob-num') || 
+              target.className.includes('blob-num')) {
+            cell = target;
+          }
+        }
+        
+        // Try closest on table-based selectors
+        if (!cell) {
+          const selectors = [
+            'td.blob-num',
+            'td[class*="blob-num"]',
+            '.blob-num',
+            '[class*="blob-num"]',
+            'td[data-line-number]'
+          ];
+          for (const selector of selectors) {
+            cell = target.closest(selector);
+            if (cell) break;
+          }
+        }
+        
+        if (cell) {
+          // Find parent row
+          const row = cell.closest('tr[data-line-number]');
+          if (row) {
+            const lineNumAttr = row.getAttribute('data-line-number');
+            if (lineNumAttr) {
+              lineNumber = parseInt(lineNumAttr, 10);
+              lineNumberElement = row;
+            }
+          }
+        }
+      }
+      
+      if (!lineNumberElement || isNaN(lineNumber)) {
+        return;
+      }
+      
+      // Show icon for this line with a small delay to avoid conflicts with GitHub's menu
+      setTimeout(() => {
+        createAndPositionIssueIcon(lineNumber, lineNumberElement);
+      }, 150);
+    };
+    
+    // Create click handler as backup (in case mousedown doesn't work)
+    lineNumberClickHandler = lineNumberMousedownHandler;
+    
+    // Add event listeners with capture phase to catch events early (before GitHub's handlers)
+    document.addEventListener('mousedown', lineNumberMousedownHandler, true);
+    document.addEventListener('click', lineNumberClickHandler, true);
+  }
+
   function injectLineIcons(issues) {
     // Remove existing icons first
     removeLineIcons();
@@ -1816,6 +2155,9 @@
     // Clear permanent highlights
     clearPermanentHighlights();
     
+    // Remove create issue icon
+    removeCreateIssueIcon();
+    
     // Restore original container styles
     const targetContainer = findTargetContainer();
     if (targetContainer && originalContainerDisplay !== null) {
@@ -1853,6 +2195,8 @@
       if (reopenButton) {
         reopenButton.style.display = 'none';
       }
+      // Remove create issue icon when not on blob page
+      removeCreateIssueIcon();
       return;
     }
 
@@ -1971,6 +2315,17 @@
     if (repoIcon) {
       repoIcon.inject();
     }
+    
+    // Set up line number click handlers for create issue icon
+    if (isBlobPage()) {
+      // Use setTimeout to ensure DOM is fully loaded
+      setTimeout(() => {
+        handleLineNumberClicks();
+      }, 300);
+    } else {
+      // Remove icon if not on blob page
+      removeCreateIssueIcon();
+    }
   }
 
   if (document.readyState === 'loading') {
@@ -2011,6 +2366,14 @@
             if (repoIcon) {
               repoIcon.inject();
             }
+            // Set up line number click handlers
+            if (isBlobPage()) {
+              setTimeout(() => {
+                handleLineNumberClicks();
+              }, 300);
+            } else {
+              removeCreateIssueIcon();
+            }
           } else {
             cleanupExtension();
           }
@@ -2034,6 +2397,14 @@
           const repoIcon = window.GitHubReviewComments?.repositoryIcon;
           if (repoIcon) {
             repoIcon.inject();
+          }
+          // Set up line number click handlers
+          if (isBlobPage()) {
+            setTimeout(() => {
+              handleLineNumberClicks();
+            }, 300);
+          } else {
+            removeCreateIssueIcon();
           }
         } else {
           cleanupExtension();
