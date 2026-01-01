@@ -1,7 +1,6 @@
 # Potential Features for GitHub Review Comments Extension
 
 
-skift også toggle ikonent
 
 ## Organization & Visibility
 
